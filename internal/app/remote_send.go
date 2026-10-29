@@ -1,6 +1,7 @@
 package app
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -56,11 +57,15 @@ func (s *Service) Send(ctx context.Context, b remote.Backend, name string, m Mes
 	if err != nil {
 		return out, err
 	}
-	payload, err := json.Marshal(m)
-	if err != nil {
+	// HTML escaping would turn each <, > and & into six bytes; without it a
+	// body of code still fits the transport's input limit.
+	var payload bytes.Buffer
+	enc := json.NewEncoder(&payload)
+	enc.SetEscapeHTML(false)
+	if err = enc.Encode(m); err != nil {
 		return out, err
 	}
-	data, err := b.Exchange(ctx, r, payload)
+	data, err := b.Exchange(ctx, r, payload.Bytes())
 	if err != nil {
 		return out, err
 	}
