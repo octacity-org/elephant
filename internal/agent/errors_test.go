@@ -93,8 +93,8 @@ func TestConfigureReadsCommentsAndTableSpacing(t *testing.T) {
 		t.Fatalf("%+v %v", result, err)
 	}
 	content := read(t, path)
-	if strings.Contains(content, "/old/elephant") || strings.Contains(content, "keep this comment") {
-		t.Fatalf("stale Elephant table was not replaced:\n%s", content)
+	if strings.Contains(content, "/old/elephant") || !strings.Contains(content, "[ mcp_servers.elephant ] # keep this comment\n") {
+		t.Fatalf("stale command was not replaced in place:\n%s", content)
 	}
 	if !strings.Contains(content, "[other]\nvalue = \"kept\"") || !strings.Contains(content, "command = \"/new/elephant\"") {
 		t.Fatalf("unrelated content was lost:\n%s", content)
