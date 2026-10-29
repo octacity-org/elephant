@@ -52,9 +52,16 @@ func launchCommand(executable, database string) []string {
 }
 
 // Command returns the MCP stdio launch command Elephant writes into agent
-// configuration and reports from doctor.
+// configuration and reports from doctor. It resolves the database path as
+// Configure does, so doctor can compare it with a registration.
 func Command(executable, database string) []string {
-	return launchCommand(strings.TrimSpace(executable), strings.TrimSpace(database))
+	database = strings.TrimSpace(database)
+	if database != "" {
+		if resolved, err := resolvePath(database, "database path"); err == nil {
+			database = resolved
+		}
+	}
+	return launchCommand(strings.TrimSpace(executable), database)
 }
 
 func resolveExecutable(exe string) (string, error) {
