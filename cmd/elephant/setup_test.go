@@ -193,3 +193,65 @@ func checkStatus(t *testing.T, report diagnosticReport, name string) string {
 	t.Fatalf("missing %q check in %+v", name, report.Checks)
 	return ""
 }
+
+func checkDetail(report diagnosticReport, name string) string {
+	for _, check := range report.Checks {
+		if check.Name == name {
+			return check.Detail
+		}
+	}
+	return ""
+}
+
+// Doctor reads the actor and launch command from each agent registration, and
+// never changes the database it diagnoses.
+func TestDoctorChecksRegistrationsWithoutChangingTheDatabase(t *testing.T) {
+	home, database := isolatedHome(t)
+	t.Setenv("ELEPHANT_ACTOR_ID", "")
+	ctx := context.Background()
+	var out, logs bytes.Buffer
+	doctor := func() diagnosticReport {
+		t.Helper()
+		out.Reset()
+		run(ctx, []string{"doctor", "--json"}, &out, &logs)
+		return decodeReport(t, out.Bytes())
+	}
+	if err := run(ctx, []string{"setup", "codex"}, &out, &logs); err != nil {
+		t.Fatal(err)
+	}
+	report := doctor()
+	if checkStatus(t, report, "actor") != statusOK || checkStatus(t, report, "mcp") != statusOK {
+		t.Fatalf("after setup: %+v", report.Checks)
+	}
+
+	// A registration for another database is stale for this one.
+	if err := run(ctx, []string{"--db", filepath.Join(home, "other.zova"), "setup", "codex"}, &out, &logs); err != nil {
+		t.Fatal(err)
+	}
+	report = doctor()
+	if checkStatus(t, report, "mcp") != statusWarning || !strings.Contains(checkDetail(report, "mcp"), "other.zova") {
+		t.Fatalf("stale registration: %+v", report.Checks)
+	}
+
+	// An older storage format is reported, not migrated.
+	fixture, err := os.ReadFile(filepath.Join("..", "..", "internal", "storage", "zova", "testdata", "format11.zova"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = os.MkdirAll(filepath.Dir(database), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err = os.WriteFile(database, fixture, 0600); err != nil {
+		t.Fatal(err)
+	}
+	report = doctor()
+	if checkStatus(t, report, "database") != statusWarning || !strings.Contains(checkDetail(report, "database"), "format 11") {
+		t.Fatalf("older format: %+v", report.Checks)
+	}
+	if current, err := os.ReadFile(database); err != nil || !bytes.Equal(current, fixture) {
+		t.Fatalf("doctor changed the database: %v", err)
+	}
+	if backups, _ := filepath.Glob(filepath.Join(filepath.Dir(database), "*backup*")); len(backups) != 0 {
+		t.Fatalf("doctor migrated the database: %v", backups)
+	}
+}

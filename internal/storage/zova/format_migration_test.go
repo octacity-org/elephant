@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -289,4 +290,38 @@ func TestMigrationWaitsForOpenStores(t *testing.T) {
 		t.Fatalf("migration lock after the store closed: %v", err)
 	}
 	unlock()
+}
+
+// PendingMigration reports what Open would migrate without changing the file.
+func TestPendingMigrationReadsWithoutWriting(t *testing.T) {
+	path, original := copyFormat11(t)
+	if got, err := PendingMigration(path); err != nil || !strings.Contains(got, "format 11") {
+		t.Fatalf("format 11 = %q, %v", got, err)
+	}
+	if current, _ := os.ReadFile(path); !bytes.Equal(current, original) {
+		t.Fatal("PendingMigration changed an older-format database")
+	}
+	s, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.Close()
+	if got, err := PendingMigration(path); err != nil || got != "" {
+		t.Fatalf("current database = %q, %v", got, err)
+	}
+	db, err := native.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = db.Exec("UPDATE elephant_meta SET value='4' WHERE key='schema_version'"); err != nil {
+		t.Fatal(err)
+	}
+	db.Close()
+	before, _ := os.ReadFile(path)
+	if got, err := PendingMigration(path); err != nil || !strings.Contains(got, "schema version 4") {
+		t.Fatalf("schema 4 = %q, %v", got, err)
+	}
+	if after, _ := os.ReadFile(path); !bytes.Equal(after, before) {
+		t.Fatal("PendingMigration changed a database with an older schema")
+	}
 }

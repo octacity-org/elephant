@@ -37,6 +37,40 @@ func migrateFormat(path string) error {
 	return migrateLocked(path, info.FormatVersion)
 }
 
+// PendingMigration describes the migration Open would run on an existing
+// database, or returns "" when Open would not change it. It never writes to
+// the file, so diagnostics can report a migration instead of running it.
+func PendingMigration(path string) (string, error) {
+	info, err := native.ProbeFormat(path)
+	if err != nil {
+		return "", fmt.Errorf("%w: %w", model.ErrStorage, err)
+	}
+	switch info.Compatibility {
+	case native.FormatMigratable:
+		return fmt.Sprintf("storage format %d is upgraded to the current format, keeping a backup", info.FormatVersion), nil
+	case native.FormatCurrent:
+	default:
+		return "", fmt.Errorf("%w: unsupported storage format %d", model.ErrSchema, info.FormatVersion)
+	}
+	db, err := native.OpenWithOptions(path, native.OpenOptions{ReadOnly: true, BusyTimeoutMS: busyTimeoutMS})
+	if err != nil {
+		return "", fmt.Errorf("%w: %w", model.ErrStorage, err)
+	}
+	defer db.Close()
+	rows, err := (&transaction{db: db}).query("SELECT value FROM elephant_meta WHERE key='schema_version'")
+	if err != nil || len(rows) != 1 {
+		return "", model.ErrSchema
+	}
+	switch version := value(rows[0][0]); version {
+	case "5":
+		return "", nil
+	case "1", "2", "3", "4":
+		return "schema version " + version + " is upgraded to version 5", nil
+	default:
+		return "", model.ErrSchema
+	}
+}
+
 func needsFormatMigration(path string) bool {
 	info, err := native.ProbeFormat(path)
 	// Probe failures fall through to Open, which reports them.
