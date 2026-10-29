@@ -50,6 +50,8 @@ jobs:
             goarch: amd64
             zig-target: x86_64-windows-gnu
             binary: elephant.exe
+            # internal/app alone takes 4-5 minutes on these runners.
+            test-timeout: 10m
           - runner: macos-15
             target: macos-arm64
             goos: darwin
@@ -128,9 +130,9 @@ jobs:
             echo 'MACOSX_DEPLOYMENT_TARGET=14.0' >> "$GITHUB_ENV"
           fi
       - name: Test including real MCP stdio processes
-        run: go test -v -timeout 5m ./...
+        run: go test -v -timeout ${{ matrix.test-timeout || '5m' }} ./...
       - name: Check for data races
-        run: go test -race -timeout 5m ./...
+        run: go test -race -timeout ${{ matrix.test-timeout || '5m' }} ./...
       - name: Vet
         run: go vet ./...
       - name: Build and smoke-test release executable
