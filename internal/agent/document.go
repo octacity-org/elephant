@@ -19,17 +19,23 @@ func readState(target Target, path, content string, existed bool) (State, error)
 	if target.Format == JSON {
 		return readOpenCodeState(target, path, content, existed)
 	}
-	if len(tomlBlock(content, "mcp_servers."+ServerName)) == 0 {
-		return state, nil
+	server, env, err := codexRegistration(content)
+	if err != nil || server == nil {
+		return state, err
 	}
 	state.Configured = true
 	state.Detail = "mcp_servers." + ServerName
-	keys := tomlValues(tomlBlock(content, "mcp_servers."+ServerName))
-	if command := keys["command"]; command != "" {
-		state.Command = append(state.Command, command)
+	if raw, ok := tomlLookup(server, "command"); ok {
+		if command, ok := tomlScalar(raw); ok && command != "" {
+			state.Command = append(state.Command, command)
+		}
 	}
-	state.Command = append(state.Command, tomlArray(keys["args"])...)
-	state.ActorID = tomlValues(tomlBlock(content, "mcp_servers."+ServerName+".env"))["ELEPHANT_ACTOR_ID"]
+	if raw, ok := tomlLookup(server, "args"); ok {
+		state.Command = append(state.Command, tomlArray(raw)...)
+	}
+	if raw, ok := tomlLookup(env, "ELEPHANT_ACTOR_ID"); ok {
+		state.ActorID, _ = tomlScalar(raw)
+	}
 	return state, nil
 }
 
@@ -37,7 +43,7 @@ func edit(target Target, content string, command []string, actor string) (string
 	if target.Format == JSON {
 		return editOpenCode(content, command, actor)
 	}
-	return setTOMLBlock(content, "mcp_servers."+ServerName, tomlServerBlock(command, actor)), nil
+	return setCodexServer(content, command, actor), nil
 }
 
 // openCodePaths locates the current and legacy Elephant server entries.
