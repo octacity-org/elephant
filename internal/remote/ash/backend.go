@@ -1,7 +1,7 @@
-// Package ash transports Elephant's JSON protocol using ASH's one-shot exec CLI.
-// ASH currently does not forward stdin for exec. A POSIX printf pipeline passes
-// shell-quoted JSON to the remote Elephant receiver's stdin instead. Consequently
-// requests must fit in a command-line argument; no remote database is accessed.
+// Package ash transports Elephant's JSON protocol using ASH's one-shot execv
+// CLI. The request travels on stdin (ash execv HOST --stdin -- elephant
+// receive), so no shell runs on either side and a request is bounded by ASH's
+// input limit rather than a command line. No remote database is accessed.
 package ash
 
 import (
@@ -17,8 +17,8 @@ import (
 )
 
 const (
-	// MaxCommandSize leaves space for ASH arguments on supported operating systems.
-	MaxCommandSize = 24 << 10
+	// MaxInputSize is the most stdin ASH forwards to a remote command.
+	MaxInputSize = 64 << 10
 	// MaxResponseSize bounds remote output below ASH's own stdout limit.
 	MaxResponseSize = 4 << 20
 )
@@ -47,7 +47,7 @@ func ValidateConfig(c Config) error {
 // Executor is the local process boundary. Implementations must honor ctx and
 // propagate stdout/stderr writer errors. It never receives a local shell command.
 type Executor interface {
-	Run(ctx context.Context, name string, args []string, stdout, stderr io.Writer) error
+	Run(ctx context.Context, name string, args []string, stdin io.Reader, stdout, stderr io.Writer) error
 }
 
 // Backend executes a single request. Its zero value uses the ash binary on PATH.
@@ -66,22 +66,21 @@ func (b Backend) Exchange(ctx context.Context, c Config, payload []byte) ([]byte
 	if err := ValidateConfig(c); err != nil {
 		return nil, err
 	}
-	if len(payload) > MaxCommandSize || !json.Valid(payload) {
-		return nil, errors.New("ASH request must be valid JSON within the command size limit")
+	if !json.Valid(payload) {
+		return nil, errors.New("ASH request must be valid JSON")
+	}
+	if len(payload) > MaxInputSize {
+		return nil, fmt.Errorf("ASH request is %d bytes; ASH forwards at most %d bytes of input", len(payload), MaxInputSize)
 	}
 	path := c.ElephantPath
 	if path == "" {
 		path = "elephant"
 	}
-	command := "printf '%s' " + quote(string(payload)) + " | " + quote(path) + " receive"
-	if len(command) > MaxCommandSize {
-		return nil, fmt.Errorf("ASH request exceeds %d-byte command limit", MaxCommandSize)
-	}
-	args := make([]string, 0, 6)
+	args := make([]string, 0, 8)
 	if c.ConfigPath != "" {
 		args = append(args, "--config", c.ConfigPath)
 	}
-	args = append(args, "exec", c.Host, "--", command)
+	args = append(args, "execv", c.Host, "--stdin", "--", path, "receive")
 	binary := b.Binary
 	if binary == "" {
 		binary = "ash"
@@ -94,7 +93,7 @@ func (b Backend) Exchange(ctx context.Context, c Config, payload []byte) ([]byte
 	defer cancel()
 	stdout := limitedBuffer{limit: MaxResponseSize}
 	stderr := limitedBuffer{limit: 16 << 10}
-	err := runner.Run(ctx, binary, args, &stdout, &stderr)
+	err := runner.Run(ctx, binary, args, bytes.NewReader(payload), &stdout, &stderr)
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
@@ -102,7 +101,6 @@ func (b Backend) Exchange(ctx context.Context, c Config, payload []byte) ([]byte
 		return nil, errors.New("ASH response exceeded output limit")
 	}
 	if err != nil {
-		// Command errors intentionally omit argv, which contains project state.
 		return nil, fmt.Errorf("ASH execution failed: %w: %s", err, strings.TrimSpace(stderr.buffer.String()))
 	}
 	if !json.Valid(stdout.buffer.Bytes()) {
@@ -111,15 +109,11 @@ func (b Backend) Exchange(ctx context.Context, c Config, payload []byte) ([]byte
 	return stdout.buffer.Bytes(), nil
 }
 
-func quote(value string) string {
-	return "'" + strings.ReplaceAll(value, "'", "'\"'\"'") + "'"
-}
-
 type processExecutor struct{}
 
-func (processExecutor) Run(ctx context.Context, name string, args []string, stdout, stderr io.Writer) error {
+func (processExecutor) Run(ctx context.Context, name string, args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 	cmd := exec.CommandContext(ctx, name, args...)
-	cmd.Stdout, cmd.Stderr = stdout, stderr
+	cmd.Stdin, cmd.Stdout, cmd.Stderr = stdin, stdout, stderr
 	cmd.WaitDelay = time.Second
 	return cmd.Run()
 }

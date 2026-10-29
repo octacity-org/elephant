@@ -1,34 +1,38 @@
 package ash
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
-	"os/exec"
 	"reflect"
-	"runtime"
 	"strings"
 	"testing"
 )
 
-type executorFunc func(context.Context, string, []string, io.Writer, io.Writer) error
+type executorFunc func(context.Context, string, []string, io.Reader, io.Writer, io.Writer) error
 
-func (f executorFunc) Run(ctx context.Context, name string, args []string, stdout, stderr io.Writer) error {
-	return f(ctx, name, args, stdout, stderr)
+func (f executorFunc) Run(ctx context.Context, name string, args []string, stdin io.Reader, stdout, stderr io.Writer) error {
+	return f(ctx, name, args, stdin, stdout, stderr)
 }
 
 func TestExchangeInvocationAndRetryPreservePayload(t *testing.T) {
 	payload := []byte(`{"message_id":"same-id","title":"O'Reilly $(touch /tmp/nope); ` + "`id`" + `"}`)
-	var commands []string
-	b := Backend{Executor: executorFunc(func(ctx context.Context, name string, args []string, out, errout io.Writer) error {
-		if name != "ash" || !reflect.DeepEqual(args[:5], []string{"--config", "/a config.toml", "exec", "fedora", "--"}) {
+	var inputs [][]byte
+	b := Backend{Executor: executorFunc(func(ctx context.Context, name string, args []string, in io.Reader, out, errout io.Writer) error {
+		want := []string{"--config", "/a config.toml", "execv", "fedora", "--stdin", "--", "elephant", "receive"}
+		if name != "ash" || !reflect.DeepEqual(args, want) {
 			t.Fatalf("unexpected invocation: %s %q", name, args)
 		}
 		if _, ok := ctx.Deadline(); !ok {
 			t.Fatal("missing bounded deadline")
 		}
-		commands = append(commands, args[5])
-		_, err := io.WriteString(out, `{"ok":true}`)
+		input, err := io.ReadAll(in)
+		if err != nil {
+			return err
+		}
+		inputs = append(inputs, input)
+		_, err = io.WriteString(out, `{"ok":true}`)
 		return err
 	})}
 	for range 2 {
@@ -37,20 +41,12 @@ func TestExchangeInvocationAndRetryPreservePayload(t *testing.T) {
 			t.Fatalf("%s: %v", got, err)
 		}
 	}
-	if commands[0] != commands[1] {
-		t.Fatal("retry changed request")
-	}
-	if !strings.HasSuffix(commands[0], " | 'elephant' receive") {
-		t.Fatalf("wrong receiver: %s", commands[0])
-	}
-	if runtime.GOOS == "windows" {
-		return
-	}
-	// Exercise the actual POSIX quoting, replacing only the receiving executable.
-	command := strings.TrimSuffix(commands[0], " | 'elephant' receive")
-	got, err := exec.Command("sh", "-c", command).Output()
-	if err != nil || string(got) != string(payload) {
-		t.Fatalf("payload changed: %q %v", got, err)
+	// The payload reaches the receiver's stdin byte for byte, and a retry
+	// sends the same request.
+	for _, input := range inputs {
+		if !bytes.Equal(input, payload) {
+			t.Fatalf("stdin = %q, want %q", input, payload)
+		}
 	}
 }
 
@@ -64,14 +60,14 @@ func TestExchangeRejectsInvalidInputAndOutput(t *testing.T) {
 		{"missing host", Config{}, `{}`, `{}`, nil},
 		{"NUL config", Config{Host: "h", ElephantPath: "x\x00y"}, `{}`, `{}`, nil},
 		{"invalid payload", Config{Host: "h"}, `not json`, `{}`, nil},
-		{"large payload", Config{Host: "h"}, `"` + strings.Repeat("x", MaxCommandSize) + `"`, `{}`, nil},
+		{"large payload", Config{Host: "h"}, `"` + strings.Repeat("x", MaxInputSize) + `"`, `{}`, nil},
 		{"invalid response", Config{Host: "h"}, `{}`, `not json`, nil},
 		{"multiple responses", Config{Host: "h"}, `{}`, `{} {}`, nil},
 		{"large response", Config{Host: "h"}, `{}`, `"` + strings.Repeat("x", MaxResponseSize+1) + `"`, nil},
 		{"transport failure", Config{Host: "h"}, `{}`, `{}`, errors.New("SSH unavailable")},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			b := Backend{Executor: executorFunc(func(_ context.Context, _ string, _ []string, out, errout io.Writer) error {
+			b := Backend{Executor: executorFunc(func(_ context.Context, _ string, _ []string, _ io.Reader, out, errout io.Writer) error {
 				_, err := io.WriteString(out, tc.response)
 				if err != nil {
 					return err
@@ -88,7 +84,7 @@ func TestExchangeRejectsInvalidInputAndOutput(t *testing.T) {
 func TestCanceledExchangeDoesNotExecute(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	b := Backend{Executor: executorFunc(func(context.Context, string, []string, io.Writer, io.Writer) error {
+	b := Backend{Executor: executorFunc(func(context.Context, string, []string, io.Reader, io.Writer, io.Writer) error {
 		t.Fatal("executed canceled request")
 		return nil
 	})}
