@@ -17,8 +17,12 @@ import (
 var Version = "dev"
 
 type scope struct {
-	CWD string `json:"cwd,omitempty" jsonschema:"Repository working directory; defaults to the server working directory"`
+	CWD string `json:"cwd,omitempty" jsonschema:"Repository working directory; defaults to the client's first file root, then the server working directory"`
 }
+
+// scopeCWD lets register fill in the repository of any input embedding scope.
+func (s *scope) scopeCWD() *string { return &s.CWD }
+
 type recallInput struct {
 	scope
 	TargetVersion string `json:"target_version,omitempty"`
@@ -66,7 +70,17 @@ func PublicError(err error) error {
 	return model.ErrStorage
 }
 func register[I, O any](s *sdk.Server, name, description string, fn func(context.Context, I) (O, error)) {
-	sdk.AddTool(s, &sdk.Tool{Name: name, Description: description}, func(ctx context.Context, _ *sdk.CallToolRequest, in I) (*sdk.CallToolResult, O, error) {
+	sdk.AddTool(s, &sdk.Tool{Name: name, Description: description}, func(ctx context.Context, req *sdk.CallToolRequest, in I) (*sdk.CallToolResult, O, error) {
+		// Resolve a missing cwd like resources do: client roots first. An
+		// empty result keeps the server directory fallback in New's cwd.
+		if scoped, ok := any(&in).(interface{ scopeCWD() *string }); ok {
+			cwd, needRoots := RequestScope(req.Session, *scoped.scopeCWD(), req.Params.InputResponses, "")
+			if needRoots {
+				var zero O
+				return &sdk.CallToolResult{InputRequests: RootsInputRequests()}, zero, nil
+			}
+			*scoped.scopeCWD() = cwd
+		}
 		out, err := fn(ctx, in)
 		return nil, out, PublicError(err)
 	})
