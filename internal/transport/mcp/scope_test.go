@@ -210,8 +210,25 @@ func TestResourceAndPromptResolveAdvertisedRoots(t *testing.T) {
 			t.Fatalf("prompt resolved wrong repository, want %q: %q", want, text)
 		}
 	}
+	// Tools called without cwd resolve the same repository as resources.
+	toolProject := func(args map[string]any, want string) {
+		t.Helper()
+		r, err := session.CallTool(ctx, &sdk.CallToolParams{Name: "recall_project", Arguments: args})
+		if err != nil || r.IsError {
+			t.Fatalf("call tool: %v %+v", err, r)
+		}
+		data, _ := json.Marshal(r.StructuredContent)
+		var packet app.RecallResult
+		if err = json.Unmarshal(data, &packet); err != nil {
+			t.Fatal(err)
+		}
+		if packet.Project.Identity != want {
+			t.Fatalf("tool resolved %q, want %q", packet.Project.Identity, want)
+		}
+	}
 	recallProject("github.com/test/repoa")
 	promptProject("github.com/test/repoa")
+	toolProject(map[string]any{}, "github.com/test/repoa")
 
 	// Changing the advertised roots selects a different repository on the
 	// next read: a roots/listChanged notification followed by the fulfilled
@@ -220,6 +237,8 @@ func TestResourceAndPromptResolveAdvertisedRoots(t *testing.T) {
 	client.RemoveRoots(uriA)
 	recallProject("github.com/test/repob")
 	promptProject("github.com/test/repob")
+	toolProject(map[string]any{}, "github.com/test/repob")
+	toolProject(map[string]any{"cwd": repoA}, "github.com/test/repoa")
 
 	// An explicit cwd still wins over advertised roots.
 	pr, err := session.GetPrompt(ctx, &sdk.GetPromptParams{Name: "resume_project", Arguments: map[string]string{"cwd": repoA}})

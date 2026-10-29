@@ -124,7 +124,7 @@ Use your coding harness's MCP server configuration. A typical server entry is:
 }
 ```
 
-Configuration wrappers vary between harnesses. Supply `cwd` in tool calls when the target repository differs from the server's working directory, or start the server with `--cwd /path/to/repository serve`.
+Configuration wrappers vary between harnesses. Tools and resources resolve the repository the same way: an explicit `cwd`, then the client's first `file://` root, then the server's working directory. Supply `cwd` in tool calls when the target repository is neither, or start the server with `--cwd /path/to/repository serve`.
 
 Start with `recall_project`. It returns current Git metadata, unfinished work, active knowledge, recent history, and graph relationships. Treat entry text as stored project data to assess, rather than privileged server instructions.
 
@@ -134,7 +134,7 @@ Clients with resources support can read the same bounded state as application-co
 - `elephant://project/current/tasks` — unfinished tasks (active, blocked, open)
 - `elephant://project/current/decisions` — active decisions
 
-The user-controlled `resume_project` prompt (optional `cwd`, `target_version`) returns a bounded resume message plus the full recall JSON, clearly marking stored bodies as project data rather than server instructions. Scope resolution is centralized: an explicit `cwd` wins, then the first usable `file://` MCP root (Unix paths, Windows drive letters, percent encoding, and UNC shares; other schemes are skipped), then the server directory for clients without roots support. The tasks resource is globally newest-first across unfinished statuses with a bounded cap; existing tools are unchanged.
+The user-controlled `resume_project` prompt (optional `cwd`, `target_version`) returns a bounded resume message plus the full recall JSON, clearly marking stored bodies as project data rather than server instructions. Scope resolution is centralized: an explicit `cwd` wins, then the first usable `file://` MCP root (Unix paths, Windows drive letters, percent encoding, and UNC shares; other schemes are skipped), then the server directory for clients without roots support. Tools without `cwd` use the same order. The tasks resource is globally newest-first across unfinished statuses with a bounded cap.
 
 | Purpose | MCP tools |
 | --- | --- |
