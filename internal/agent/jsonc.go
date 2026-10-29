@@ -69,6 +69,32 @@ func stripJSONComments(s string) string {
 	return out.String()
 }
 
+// stripJSONTrailingCommas removes commas that JSONC allows before a closing
+// bracket or brace, so a comment-free span can be decoded with encoding/json.
+func stripJSONTrailingCommas(s string) string {
+	var out strings.Builder
+	out.Grow(len(s))
+	for i := 0; i < len(s); i++ {
+		switch s[i] {
+		case '"':
+			end := scanJSONString(s, i)
+			if end < 0 {
+				end = len(s)
+			}
+			out.WriteString(s[i:end])
+			i = end - 1
+			continue
+		case ',':
+			next := skipJSONTrivia(s, i+1)
+			if next < len(s) && (s[next] == '}' || s[next] == ']') {
+				continue
+			}
+		}
+		out.WriteByte(s[i])
+	}
+	return out.String()
+}
+
 // skipJSONTrivia advances past whitespace and comments.
 func skipJSONTrivia(s string, i int) int {
 	for i < len(s) {
@@ -465,7 +491,7 @@ func readJSONPath(content string, path []string) (any, bool, error) {
 				continue
 			}
 			found = true
-			rawVal := stripJSONComments(raw[m.valSpan.start:m.valSpan.end])
+			rawVal := stripJSONTrailingCommas(stripJSONComments(raw[m.valSpan.start:m.valSpan.end]))
 			if i == len(path)-1 {
 				var value any
 				decoder := json.NewDecoder(strings.NewReader(rawVal))
