@@ -7,8 +7,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	gitrepo "elephant/internal/git"
 	"elephant/internal/model"
@@ -42,7 +41,8 @@ type Response struct {
 
 func validID(s string) bool {
 	u, err := uuid.Parse(s)
-	return err == nil && u.Version() == 7 && u.String() == s
+	// The version is the high nibble of byte 6.
+	return err == nil && u[6]>>4 == 7 && u.String() == s
 }
 func validText(s string, n int) bool {
 	return strings.TrimSpace(s) != "" && len(s) <= n && !strings.ContainsAny(s, "\x00\r\n")
@@ -266,10 +266,10 @@ func (s *Service) BuildMessage(ctx context.Context, cwd, operation string, k mod
 	if err != nil {
 		return Message{}, err
 	}
-	m := Message{ProtocolVersion: 1, MessageID: uuid.Must(uuid.NewV7()).String(), SenderElephantID: self, Project: ProjectRef{g.Identity, g.Name}, Operation: operation}
+	m := Message{ProtocolVersion: 1, MessageID: uuid.NewV7().String(), SenderElephantID: self, Project: ProjectRef{g.Identity, g.Name}, Operation: operation}
 	if operation == "entry.send" {
 		now := time.Now().UTC()
-		m.Entry = &model.Entry{ID: uuid.Must(uuid.NewV7()).String(), ActorID: currentActor(), Kind: k, Title: in.Title, Body: in.Body, Status: model.DefaultStatus(k), TargetVersion: in.TargetVersion, StartCommit: optional(g.Head), CreatedAt: now, UpdatedAt: now}
+		m.Entry = &model.Entry{ID: uuid.NewV7().String(), ActorID: currentActor(), Kind: k, Title: in.Title, Body: in.Body, Status: model.DefaultStatus(k), TargetVersion: in.TargetVersion, StartCommit: optional(g.Head), CreatedAt: now, UpdatedAt: now}
 		if m.Files, err = repoFiles(g, in.RelatedFiles); err != nil {
 			return Message{}, err
 		}
@@ -309,7 +309,7 @@ func (s *Service) evidenceForSend(ctx context.Context, cwd, entryID string, rows
 			if e.Kind != model.Fact {
 				return fmt.Errorf("%w: evidence can only be attached to facts", model.ErrInvalidInput)
 			}
-			source.ID = uuid.Must(uuid.NewV7()).String()
+			source.ID = uuid.NewV7().String()
 			source.EntryID = entryID
 			source.VerifiedAt = time.Now().UTC()
 			out = append(out, source)

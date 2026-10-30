@@ -7,11 +7,11 @@ import (
 	"reflect"
 	"testing"
 	"time"
+	"uuid"
 
 	"elephant/internal/model"
 	"elephant/internal/storage"
 	native "github.com/ata-sesli/zova/bindings/go"
-	"github.com/google/uuid"
 )
 
 func TestSchemaOneMigrationPreservesLocalState(t *testing.T) {
@@ -97,7 +97,7 @@ CREATE INDEX ` + tableName + `_version ON ` + tableName + `(target_version);`)
 					return err
 				}
 				id, err := uuid.Parse(self)
-				if err != nil || id.Version() != 7 {
+				if err != nil || id[6]>>4 != 7 {
 					return fmt.Errorf("invalid installation identity %q", self)
 				}
 				if attempt == 0 {
@@ -136,7 +136,7 @@ CREATE INDEX ` + tableName + `_version ON ` + tableName + `(target_version);`)
 						return err
 					}
 					id, err := uuid.Parse(local.ID)
-					if err != nil || id.Version() != 7 || local.Scope != "local" || local.TableName != project.table || local.SourceElephantID != self {
+					if err != nil || id[6]>>4 != 7 || local.Scope != "local" || local.TableName != project.table || local.SourceElephantID != self {
 						return fmt.Errorf("invalid local metadata: %+v", local)
 					}
 					if attempt == 0 {

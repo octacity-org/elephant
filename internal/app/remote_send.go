@@ -6,8 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"time"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	"elephant/internal/model"
 	"elephant/internal/remote"
@@ -22,7 +21,7 @@ func (s *Service) AddRemote(ctx context.Context, name, backend, config string) (
 		return out, err
 	}
 	now := time.Now().UTC()
-	out = model.Remote{ID: uuid.Must(uuid.NewV7()).String(), Name: name, Backend: backend, BackendConfig: config, CreatedAt: now, UpdatedAt: now}
+	out = model.Remote{ID: uuid.NewV7().String(), Name: name, Backend: backend, BackendConfig: config, CreatedAt: now, UpdatedAt: now}
 	err = s.store.Transact(ctx, func(tx storage.Tx) error {
 		rs, err := tx.Remotes()
 		if err != nil {

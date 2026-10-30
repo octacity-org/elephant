@@ -9,8 +9,7 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	"elephant/internal/model"
 	"elephant/internal/storage/zova"
@@ -29,7 +28,7 @@ func TestRemoteReceiveIsolationAndRetry(t *testing.T) {
 		t.Fatal(err)
 	}
 	now := time.Now().UTC()
-	id := func() string { return uuid.Must(uuid.NewV7()).String() }
+	id := func() string { return uuid.NewV7().String() }
 	m := Message{ProtocolVersion: 1, MessageID: id(), SenderElephantID: id(), Project: ProjectRef{Identity: "github.com/test/repo", Name: "repo"}, Operation: "entry.send", Entry: &model.Entry{ID: id(), Kind: model.Fact, Title: "remote fact", Body: "context", Status: "active", ActorID: "actor-one", CreatedAt: now, UpdatedAt: now}, Files: []string{"src/main.go"}}
 	first, err := s.Receive(ctx, m)
 	if err != nil {
@@ -168,8 +167,8 @@ func TestTwoElephantsKeepLocalTruth(t *testing.T) {
 		t.Fatal(err)
 	}
 	originalID := m.Entry.ID
-	m.MessageID = uuid.Must(uuid.NewV7()).String()
-	m.Entry.ID = uuid.Must(uuid.NewV7()).String()
+	m.MessageID = uuid.NewV7().String()
+	m.Entry.ID = uuid.NewV7().String()
 	m.Entry.ActorID = "human-two"
 	m.Relations = []RelationInput{{Type: "depends_on", EntryID: originalID}}
 	if _, err = a.Send(ctx, loopback{b}, "B", m); err != nil {
@@ -185,7 +184,7 @@ func TestTwoElephantsKeepLocalTruth(t *testing.T) {
 	}
 	// Reusing an entry UUID in another source cannot overwrite its graph nodes.
 	cid, _ := c.Identity(ctx)
-	m.MessageID = uuid.Must(uuid.NewV7()).String()
+	m.MessageID = uuid.NewV7().String()
 	m.SenderElephantID = cid
 	m.Entry.ID = originalID
 	m.Files = []string{"c.go"}
@@ -197,8 +196,8 @@ func TestTwoElephantsKeepLocalTruth(t *testing.T) {
 	if err != nil || len(other.Tasks) != 1 || len(other.Relations) != 1 {
 		t.Fatal(other, err)
 	}
-	m.MessageID = uuid.Must(uuid.NewV7()).String()
-	m.Entry.ID = uuid.Must(uuid.NewV7()).String()
+	m.MessageID = uuid.NewV7().String()
+	m.Entry.ID = uuid.NewV7().String()
 	m.Relations = []RelationInput{{Type: "depends_on", EntryID: received.Tasks[0].ID}}
 	// Pick the A-only second task, regardless of sort order.
 	for _, e := range received.Tasks {
@@ -219,7 +218,7 @@ func TestTwoElephantsKeepLocalTruth(t *testing.T) {
 	}
 }
 func TestMalformedRemoteMessages(t *testing.T) {
-	id := func() string { return uuid.Must(uuid.NewV7()).String() }
+	id := func() string { return uuid.NewV7().String() }
 	now := time.Now().UTC()
 	base := Message{ProtocolVersion: 1, MessageID: id(), SenderElephantID: id(), Project: ProjectRef{"github.com/test/repo", "repo"}, Operation: "entry.send", Entry: &model.Entry{ID: id(), Kind: model.Fact, Title: "title", Body: "body", Status: "active", ActorID: "actor", CreatedAt: now, UpdatedAt: now}}
 	for name, mutate := range map[string]func(*Message){"version": func(m *Message) { m.ProtocolVersion = 2 }, "sender": func(m *Message) { m.SenderElephantID = "bad" }, "entry": func(m *Message) { m.Entry.ID = "bad" }, "kind": func(m *Message) { m.Entry.Kind = "bad" }, "status": func(m *Message) { m.Entry.Status = "done" }, "actor": func(m *Message) { m.Entry.ActorID = "" }, "path": func(m *Message) { m.Files = []string{"/etc/passwd"} }, "traversal": func(m *Message) { m.Files = []string{"a/../b"} }, "local project": func(m *Message) { m.Project.Identity = "local:/tmp/repo" }, "relation": func(m *Message) { m.Relations = []RelationInput{{Type: "evil", EntryID: id()}} }} {
@@ -237,7 +236,7 @@ func TestMalformedRemoteMessages(t *testing.T) {
 
 func TestRejectMalformedProjectIdentity(t *testing.T) {
 	for _, identity := range []string{"", "../project", "C:\\repo", "repo", "github.com/../repo", "user:secret@github.com/repo"} {
-		m := Message{ProtocolVersion: 1, MessageID: uuid.Must(uuid.NewV7()).String(), SenderElephantID: uuid.Must(uuid.NewV7()).String(), Project: ProjectRef{Identity: identity, Name: "repo"}, Operation: "project.ensure"}
+		m := Message{ProtocolVersion: 1, MessageID: uuid.NewV7().String(), SenderElephantID: uuid.NewV7().String(), Project: ProjectRef{Identity: identity, Name: "repo"}, Operation: "project.ensure"}
 		if validateMessage(m) == nil {
 			t.Errorf("accepted %q", identity)
 		}
@@ -261,7 +260,7 @@ func TestSendReportsRemoteFailure(t *testing.T) {
 		t.Fatal(err)
 	}
 	self, _ := s.Identity(ctx)
-	m := Message{ProtocolVersion: 1, MessageID: uuid.Must(uuid.NewV7()).String(), SenderElephantID: self, Project: ProjectRef{Identity: "github.com/test/repo", Name: "repo"}, Operation: "project.ensure"}
+	m := Message{ProtocolVersion: 1, MessageID: uuid.NewV7().String(), SenderElephantID: self, Project: ProjectRef{Identity: "github.com/test/repo", Name: "repo"}, Operation: "project.ensure"}
 	if _, err = s.Send(ctx, failedBackend{}, "peer", m); !errors.Is(err, model.ErrRemote) {
 		t.Fatalf("missing remote error classification: %v", err)
 	}

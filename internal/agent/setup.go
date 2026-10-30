@@ -5,8 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	"elephant/internal/model"
 )
@@ -208,7 +207,7 @@ func Configure(in Input, env Env) (Result, error) {
 		out.ActorID = state.ActorID
 	}
 	if out.ActorID == "" {
-		out.ActorID = name + "-" + uuid.Must(uuid.NewV7()).String()
+		out.ActorID = name + "-" + uuid.NewV7().String()
 	}
 	if err = validateActor(out.ActorID); err != nil {
 		return out, err

@@ -12,8 +12,7 @@ import (
 	"sync"
 	"testing"
 	"time"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	"elephant/internal/app"
 	"elephant/internal/model"
@@ -79,7 +78,7 @@ func populatedService(t *testing.T, ctx context.Context, cwd, dbFile string) *ap
 		t.Fatal(err)
 	}
 	// Receive a remote entry and adopt it so an adoption receipt exists.
-	id := func() string { return uuid.Must(uuid.NewV7()).String() }
+	id := func() string { return uuid.NewV7().String() }
 	m := app.Message{
 		ProtocolVersion: 1, MessageID: id(), SenderElephantID: id(),
 		Project: app.ProjectRef{Identity: "github.com/test/portable", Name: "portable"}, Operation: "entry.send",
@@ -293,16 +292,16 @@ func TestImportCorruptedInputRollsBack(t *testing.T) {
 		}),
 		"duplicate ID": corrupt(func(e *app.ExportEnvelope) { e.Entries = append(e.Entries, e.Entries[0]) }),
 		"unknown evidence": corrupt(func(e *app.ExportEnvelope) {
-			e.Evidence = append(e.Evidence, model.Evidence{ID: uuid.Must(uuid.NewV7()).String(), EntryID: "missing", Path: "a.go", CreatedAt: time.Now().UTC(), VerifiedAt: time.Now().UTC()})
+			e.Evidence = append(e.Evidence, model.Evidence{ID: uuid.NewV7().String(), EntryID: "missing", Path: "a.go", CreatedAt: time.Now().UTC(), VerifiedAt: time.Now().UTC()})
 		}),
 		"invalid checkpoint": corrupt(func(e *app.ExportEnvelope) {
-			e.Checkpoints = append(e.Checkpoints, model.Checkpoint{ID: uuid.Must(uuid.NewV7()).String(), ActorID: "a", CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC()})
+			e.Checkpoints = append(e.Checkpoints, model.Checkpoint{ID: uuid.NewV7().String(), ActorID: "a", CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC()})
 		}),
 		"foreign adoption": corrupt(func(e *app.ExportEnvelope) {
-			e.Adoptions = append(e.Adoptions, model.Adoption{ID: uuid.Must(uuid.NewV7()).String(), ProjectIdentity: "github.com/other/repo", SourceElephantID: "src", SourceEntryID: uuid.Must(uuid.NewV7()).String(), LocalEntryID: e.Entries[0].ID, Kind: "fact", CreatedAt: time.Now().UTC()})
+			e.Adoptions = append(e.Adoptions, model.Adoption{ID: uuid.NewV7().String(), ProjectIdentity: "github.com/other/repo", SourceElephantID: "src", SourceEntryID: uuid.NewV7().String(), LocalEntryID: e.Entries[0].ID, Kind: "fact", CreatedAt: time.Now().UTC()})
 		}),
 		"orphan adoption": corrupt(func(e *app.ExportEnvelope) {
-			e.Adoptions = append(e.Adoptions, model.Adoption{ID: uuid.Must(uuid.NewV7()).String(), ProjectIdentity: e.Project.Identity, SourceElephantID: "src", SourceEntryID: uuid.Must(uuid.NewV7()).String(), LocalEntryID: uuid.Must(uuid.NewV7()).String(), Kind: "fact", CreatedAt: time.Now().UTC()})
+			e.Adoptions = append(e.Adoptions, model.Adoption{ID: uuid.NewV7().String(), ProjectIdentity: e.Project.Identity, SourceElephantID: "src", SourceEntryID: uuid.NewV7().String(), LocalEntryID: uuid.NewV7().String(), Kind: "fact", CreatedAt: time.Now().UTC()})
 		}),
 		"missing sections": []byte(`{"format_version":2,"project":{"identity":"github.com/test/portable","name":"portable","source_elephant_id":"src"}}`),
 		"unknown field": func() []byte {
@@ -562,7 +561,7 @@ func TestExportEmitsEachAdoptionReceiptOnceAcrossProjects(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	id := func() string { return uuid.Must(uuid.NewV7()).String() }
+	id := func() string { return uuid.NewV7().String() }
 	// The same source Elephant is registered under both projects.
 	elephant := id()
 	now := time.Now().UTC()

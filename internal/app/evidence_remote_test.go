@@ -7,8 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	"elephant/internal/app"
 	"elephant/internal/model"
@@ -29,7 +28,7 @@ func TestEvidenceRemoteTransferPreservesLocations(t *testing.T) {
 	if err != nil || len(report) != 1 {
 		t.Fatal(report, err)
 	}
-	id := func() string { return uuid.Must(uuid.NewV7()).String() }
+	id := func() string { return uuid.NewV7().String() }
 	m := app.Message{ProtocolVersion: 1, MessageID: id(), SenderElephantID: id(), Project: app.ProjectRef{Identity: "github.com/test/repo", Name: "repo"}, Operation: "entry.send",
 		Entry:    &model.Entry{ID: id(), Kind: model.Fact, Title: "remote fact", Body: "context", Status: "active", ActorID: "actor", CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC()},
 		Evidence: []model.Evidence{{ID: id(), EntryID: "", Path: "src/main.go", Commit: want.Commit, Blob: want.Blob, CreatedAt: time.Now().UTC(), VerifiedAt: time.Now().UTC()}}}
@@ -106,8 +105,8 @@ func TestRemoteSendCarriesLocalEvidence(t *testing.T) {
 		t.Fatalf("carried evidence lost its provenance: %+v", m.Evidence)
 	}
 	_ = entryID
-	sentry := uuid.Must(uuid.NewV7()).String()
-	if _, err = sender.Receive(ctx, app.Message{ProtocolVersion: 1, MessageID: uuid.Must(uuid.NewV7()).String(), SenderElephantID: sentry, Project: app.ProjectRef{Identity: "github.com/test/carry", Name: "carry"}, Operation: "entry.send", Entry: &model.Entry{ID: m.Entry.ID, Kind: model.Fact, Title: "Sent", Body: "Carried body", Status: "active", ActorID: "actor", CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC()}, Evidence: []model.Evidence{{ID: m.Evidence[0].ID, EntryID: m.Entry.ID, Path: "src/hijack.go", CreatedAt: time.Now().UTC(), VerifiedAt: time.Now().UTC()}}}); err != nil {
+	sentry := uuid.NewV7().String()
+	if _, err = sender.Receive(ctx, app.Message{ProtocolVersion: 1, MessageID: uuid.NewV7().String(), SenderElephantID: sentry, Project: app.ProjectRef{Identity: "github.com/test/carry", Name: "carry"}, Operation: "entry.send", Entry: &model.Entry{ID: m.Entry.ID, Kind: model.Fact, Title: "Sent", Body: "Carried body", Status: "active", ActorID: "actor", CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC()}, Evidence: []model.Evidence{{ID: m.Evidence[0].ID, EntryID: m.Entry.ID, Path: "src/hijack.go", CreatedAt: time.Now().UTC(), VerifiedAt: time.Now().UTC()}}}); err != nil {
 		t.Fatalf("carried evidence rejected: %v", err)
 	}
 	got, err := sender.RecallSource(ctx, app.ProjectRef{Identity: "github.com/test/carry", Name: "carry"}, sentry, "")
@@ -124,8 +123,8 @@ func TestRemoteSendCarriesLocalEvidence(t *testing.T) {
 		if !errors.Is(err, model.ErrInvalidInput) {
 			t.Fatalf("sending a %s with evidence = %v, want invalid input", k, err)
 		}
-		entry := &model.Entry{ID: uuid.Must(uuid.NewV7()).String(), Kind: k, Title: "Sent", Body: "B", Status: model.DefaultStatus(k), ActorID: "actor", CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC()}
-		_, err = sender.Receive(ctx, app.Message{ProtocolVersion: 1, MessageID: uuid.Must(uuid.NewV7()).String(), SenderElephantID: sentry, Project: app.ProjectRef{Identity: "github.com/test/carry", Name: "carry"}, Operation: "entry.send", Entry: entry, Evidence: []model.Evidence{{ID: uuid.Must(uuid.NewV7()).String(), EntryID: entry.ID, Path: "runtime.go", CreatedAt: time.Now().UTC(), VerifiedAt: time.Now().UTC()}}})
+		entry := &model.Entry{ID: uuid.NewV7().String(), Kind: k, Title: "Sent", Body: "B", Status: model.DefaultStatus(k), ActorID: "actor", CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC()}
+		_, err = sender.Receive(ctx, app.Message{ProtocolVersion: 1, MessageID: uuid.NewV7().String(), SenderElephantID: sentry, Project: app.ProjectRef{Identity: "github.com/test/carry", Name: "carry"}, Operation: "entry.send", Entry: entry, Evidence: []model.Evidence{{ID: uuid.NewV7().String(), EntryID: entry.ID, Path: "runtime.go", CreatedAt: time.Now().UTC(), VerifiedAt: time.Now().UTC()}}})
 		if !errors.Is(err, model.ErrInvalidInput) {
 			t.Fatalf("receiving a %s with evidence = %v, want invalid input", k, err)
 		}

@@ -4,8 +4,7 @@ import (
 	"context"
 	"fmt"
 	"time"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	gitrepo "elephant/internal/git"
 	"elephant/internal/model"
@@ -78,7 +77,7 @@ func (s *Service) AddEvidence(ctx context.Context, cwd, entryID, path string, li
 			return err
 		}
 		now := time.Now().UTC()
-		evidence := model.Evidence{ID: uuid.Must(uuid.NewV7()).String(), EntryID: entryID, Path: clean, Line: line, Commit: g.Head, Blob: blob, CreatedAt: now, VerifiedAt: now}
+		evidence := model.Evidence{ID: uuid.NewV7().String(), EntryID: entryID, Path: clean, Line: line, Commit: g.Head, Blob: blob, CreatedAt: now, VerifiedAt: now}
 		if err = tx.PutEvidence(p, evidence); err != nil {
 			return err
 		}

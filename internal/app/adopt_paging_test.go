@@ -6,8 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	"elephant/internal/app"
 	"elephant/internal/model"
@@ -29,7 +28,7 @@ func TestInboxDiffReadEveryEntry(t *testing.T) {
 	}
 	defer db.Close()
 	s := app.New(db)
-	id := func() string { return uuid.Must(uuid.NewV7()).String() }
+	id := func() string { return uuid.NewV7().String() }
 
 	status, err := s.Status(ctx, cwd)
 	if err != nil {

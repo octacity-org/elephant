@@ -9,8 +9,7 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	"elephant/internal/app"
 	"elephant/internal/model"
@@ -73,7 +72,7 @@ func TestReviewFindingsAndReadOnly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	danglingID := uuid.Must(uuid.NewV7()).String()
+	danglingID := uuid.NewV7().String()
 	now := time.Now().UTC()
 	err = db.Transact(ctx, func(tx storage.Tx) error {
 		e := model.Entry{ID: danglingID, ActorID: "tester", Kind: model.Task, Title: "D", Body: "dangling", Status: "open", CreatedAt: now, UpdatedAt: now}
@@ -86,7 +85,7 @@ func TestReviewFindingsAndReadOnly(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Supersession anomaly: mark superseded without edge.
-	supID := uuid.Must(uuid.NewV7()).String()
+	supID := uuid.NewV7().String()
 	err = db.Transact(ctx, func(tx storage.Tx) error {
 		e := model.Entry{ID: supID, ActorID: "tester", Kind: model.Decision, Title: "S", Body: "old", Status: "superseded", CreatedAt: now, UpdatedAt: now}
 		return tx.Put(status.Project, e)
@@ -95,7 +94,7 @@ func TestReviewFindingsAndReadOnly(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Old task via backdated timestamp.
-	oldID := uuid.Must(uuid.NewV7()).String()
+	oldID := uuid.NewV7().String()
 	old := now.Add(-40 * 24 * time.Hour)
 	err = db.Transact(ctx, func(tx storage.Tx) error {
 		e := model.Entry{ID: oldID, ActorID: "tester", Kind: model.Task, Title: "Old", Body: "stale", Status: "open", CreatedAt: old, UpdatedAt: old}
@@ -191,20 +190,20 @@ func TestReviewUsesEvidenceRecordsForFacts(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Stale row, evidence verified just now: must not be flagged.
-	staleID := uuid.Must(uuid.NewV7()).String()
+	staleID := uuid.NewV7().String()
 	commit := reviewHead(t, cwd)
 	err = db.Transact(ctx, func(tx storage.Tx) error {
 		e := model.Entry{ID: staleID, ActorID: "tester", Kind: model.Fact, Title: "Stale edit", Body: "old row", Status: "active", CreatedAt: now.Add(-200 * 24 * time.Hour), UpdatedAt: now.Add(-200 * 24 * time.Hour)}
 		if err := tx.Put(status.Project, e); err != nil {
 			return err
 		}
-		return tx.PutEvidence(status.Project, model.Evidence{ID: uuid.Must(uuid.NewV7()).String(), EntryID: staleID, Path: "evidence.txt", Commit: commit, Blob: "bogusdigest", CreatedAt: now.Add(-time.Hour), VerifiedAt: now})
+		return tx.PutEvidence(status.Project, model.Evidence{ID: uuid.NewV7().String(), EntryID: staleID, Path: "evidence.txt", Commit: commit, Blob: "bogusdigest", CreatedAt: now.Add(-time.Hour), VerifiedAt: now})
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	err = db.Transact(ctx, func(tx storage.Tx) error {
-		return tx.PutEvidence(status.Project, model.Evidence{ID: uuid.Must(uuid.NewV7()).String(), EntryID: fresh.Entry.ID, Path: "evidence.txt", Commit: commit, Blob: "bogusdigest", CreatedAt: now.Add(-101 * 24 * time.Hour), VerifiedAt: now.Add(-100 * 24 * time.Hour)})
+		return tx.PutEvidence(status.Project, model.Evidence{ID: uuid.NewV7().String(), EntryID: fresh.Entry.ID, Path: "evidence.txt", Commit: commit, Blob: "bogusdigest", CreatedAt: now.Add(-101 * 24 * time.Hour), VerifiedAt: now.Add(-100 * 24 * time.Hour)})
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -250,14 +249,14 @@ func TestReviewEvidenceFindings(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Evidence pinned to a commit this repository cannot read: unavailable.
-	unverID := uuid.Must(uuid.NewV7()).String()
+	unverID := uuid.NewV7().String()
 	now := time.Now().UTC()
 	err = db.Transact(ctx, func(tx storage.Tx) error {
 		e := model.Entry{ID: unverID, ActorID: "tester", Kind: model.Fact, Title: "Foreign baseline", Body: "unreadable", Status: "active", CreatedAt: now, UpdatedAt: now}
 		if err := tx.Put(status.Project, e); err != nil {
 			return err
 		}
-		return tx.PutEvidence(status.Project, model.Evidence{ID: uuid.Must(uuid.NewV7()).String(), EntryID: unverID, Path: "evidence.txt", Commit: strings.Repeat("f", 40), Blob: "deadbeef", CreatedAt: now.Add(-time.Hour), VerifiedAt: now})
+		return tx.PutEvidence(status.Project, model.Evidence{ID: uuid.NewV7().String(), EntryID: unverID, Path: "evidence.txt", Commit: strings.Repeat("f", 40), Blob: "deadbeef", CreatedAt: now.Add(-time.Hour), VerifiedAt: now})
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -471,14 +470,14 @@ func TestReviewUnverifiedFactMeasurement(t *testing.T) {
 	now := time.Now().UTC()
 	day := 24 * time.Hour
 	mkFact := func(title string, created time.Time, verified *time.Time) string {
-		id := uuid.Must(uuid.NewV7()).String()
+		id := uuid.NewV7().String()
 		if err := db.Transact(ctx, func(tx storage.Tx) error {
 			e := model.Entry{ID: id, ActorID: "tester", Kind: model.Fact, Title: title, Body: "window", Status: "active", CreatedAt: created, UpdatedAt: created}
 			if err := tx.Put(status.Project, e); err != nil {
 				return err
 			}
 			if verified != nil {
-				return tx.PutEvidence(status.Project, model.Evidence{ID: uuid.Must(uuid.NewV7()).String(), EntryID: id, Path: "evidence.txt", Commit: strings.Repeat("f", 40), Blob: "deadbeef", CreatedAt: *verified, VerifiedAt: *verified})
+				return tx.PutEvidence(status.Project, model.Evidence{ID: uuid.NewV7().String(), EntryID: id, Path: "evidence.txt", Commit: strings.Repeat("f", 40), Blob: "deadbeef", CreatedAt: *verified, VerifiedAt: *verified})
 			}
 			return nil
 		}); err != nil {

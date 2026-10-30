@@ -7,8 +7,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"testing"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	"elephant/internal/app"
 	"elephant/internal/model"
@@ -147,7 +146,7 @@ func TestEvidenceVerifyReadOnlyAndRollback(t *testing.T) {
 		t.Fatal(err)
 	}
 	now := beforeEntry.UpdatedAt
-	doomed := model.Evidence{ID: uuid.Must(uuid.NewV7()).String(), EntryID: entryID, Path: "runtime.go", CreatedAt: now, VerifiedAt: now}
+	doomed := model.Evidence{ID: uuid.NewV7().String(), EntryID: entryID, Path: "runtime.go", CreatedAt: now, VerifiedAt: now}
 	err = db.Transact(ctx, func(tx storage.Tx) error {
 		if err := tx.PutEvidence(status.Project, doomed); err != nil {
 			return err
@@ -179,7 +178,7 @@ func TestEvidenceUnavailableCommitAndShrunkenFile(t *testing.T) {
 		t.Fatal(err)
 	}
 	// A recorded commit that cannot be read reports unavailable, never changed.
-	ghost := model.Evidence{ID: uuid.Must(uuid.NewV7()).String(), EntryID: entryID, Path: "runtime.go", Line: 1,
+	ghost := model.Evidence{ID: uuid.NewV7().String(), EntryID: entryID, Path: "runtime.go", Line: 1,
 		Commit:    "0123456789abcdef0123456789abcdef01234567",
 		Blob:      "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
 		CreatedAt: status.Project.CreatedAt, VerifiedAt: status.Project.CreatedAt}

@@ -8,8 +8,7 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	"elephant/internal/app"
 	"elephant/internal/model"
@@ -196,8 +195,8 @@ func TestCheckpointRemoteRecallSeparation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	sender := uuid.Must(uuid.NewV7()).String()
-	id := func() string { return uuid.Must(uuid.NewV7()).String() }
+	sender := uuid.NewV7().String()
+	id := func() string { return uuid.NewV7().String() }
 	now := time.Now().UTC()
 	m := app.Message{ProtocolVersion: 1, MessageID: id(), SenderElephantID: sender,
 		Project:   app.ProjectRef{Identity: "github.com/test/checkpoints", Name: "checkpoints"},
@@ -246,7 +245,7 @@ func TestCheckpointFailedLinkRollback(t *testing.T) {
 	}
 	for _, in := range []app.CheckpointInput{
 		{Summary: "Bad file", RelatedFiles: []string{"../escape"}},
-		{Summary: "Bad edge", Relations: []app.RelationInput{{Type: "nope", EntryID: uuid.Must(uuid.NewV7()).String()}}},
+		{Summary: "Bad edge", Relations: []app.RelationInput{{Type: "nope", EntryID: uuid.NewV7().String()}}},
 		{Summary: ""},
 	} {
 		if _, err = s.AddCheckpoint(ctx, cwd, in); err == nil {
@@ -260,7 +259,7 @@ func TestCheckpointFailedLinkRollback(t *testing.T) {
 	// Direct storage rollback: a failed transaction writes no checkpoint row.
 	injected := errInjected()
 	err = db.Transact(ctx, func(tx storage.Tx) error {
-		c := model.Checkpoint{ID: uuid.Must(uuid.NewV7()).String(), ActorID: "t", Summary: "doomed",
+		c := model.Checkpoint{ID: uuid.NewV7().String(), ActorID: "t", Summary: "doomed",
 			CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC()}
 		if err := tx.PutCheckpoint(status.Project, c); err != nil {
 			return err
