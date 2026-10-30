@@ -6,8 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	"elephant/internal/app"
 	"elephant/internal/model"
@@ -66,7 +65,7 @@ func TestImportedAdoptionReceiptsStayArchived(t *testing.T) {
 
 	// The very peer named by the archived receipt sends that same entry again.
 	now := time.Now().UTC()
-	id := func() string { return uuid.Must(uuid.NewV7()).String() }
+	id := func() string { return uuid.NewV7().String() }
 	remote := model.Entry{ID: receipt.SourceEntryID, Kind: model.Fact, Title: "Remote fact", Body: "from afar", ActorID: "peer", Status: "active", CreatedAt: now, UpdatedAt: now}
 	if _, err = s.Receive(ctx, app.Message{
 		ProtocolVersion: 1, MessageID: id(), SenderElephantID: receipt.SourceElephantID,
@@ -147,10 +146,10 @@ func TestImportRejectsDuplicateAdoptionReceipts(t *testing.T) {
 	cases := map[string][]byte{
 		"identical receipt": duplicate(func(*model.Adoption) {}),
 		"same source entry": duplicate(func(a *model.Adoption) {
-			a.ID = uuid.Must(uuid.NewV7()).String()
+			a.ID = uuid.NewV7().String()
 		}),
 		"duplicate receipt ID": duplicate(func(a *model.Adoption) {
-			a.SourceEntryID = uuid.Must(uuid.NewV7()).String()
+			a.SourceEntryID = uuid.NewV7().String()
 		}),
 	}
 	for name, data := range cases {

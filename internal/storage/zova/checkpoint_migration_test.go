@@ -5,9 +5,9 @@ import (
 	"errors"
 	"path/filepath"
 	"testing"
+	"uuid"
 
 	native "github.com/ata-sesli/zova/bindings/go"
-	"github.com/google/uuid"
 
 	"elephant/internal/storage"
 )
@@ -21,7 +21,7 @@ func craftSchemaThree(t *testing.T, path string) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	elephantID := uuid.Must(uuid.NewV7()).String()
+	elephantID := uuid.NewV7().String()
 	table := "p_0123456789abcdef0123456789abcdef"
 	if err = db.Exec(`CREATE TABLE elephant_meta(key TEXT PRIMARY KEY,value TEXT NOT NULL);
 CREATE TABLE projects(id TEXT PRIMARY KEY,identity TEXT NOT NULL UNIQUE,name TEXT NOT NULL,remote TEXT NOT NULL,table_name TEXT NOT NULL UNIQUE,created_at TEXT NOT NULL,updated_at TEXT NOT NULL);
@@ -31,7 +31,7 @@ CREATE TABLE received_messages(id TEXT PRIMARY KEY,digest TEXT NOT NULL);
 INSERT INTO elephant_meta VALUES('schema_version','3');
 INSERT INTO elephant_meta VALUES('elephant_id','` + elephantID + `');
 INSERT INTO projects VALUES('prj_v3','example.org/team/v3','v3','https://example.org/team/v3.git','` + table + `','2026-09-01T12:00:00.000000000Z','2026-09-02T12:00:00.000000000Z');
-INSERT INTO project_tables VALUES('` + uuid.Must(uuid.NewV7()).String() + `','example.org/team/v3','v3','` + table + `','local','` + elephantID + `','2026-09-01T12:00:00.000000000Z','2026-09-02T12:00:00.000000000Z');`); err != nil {
+INSERT INTO project_tables VALUES('` + uuid.NewV7().String() + `','example.org/team/v3','v3','` + table + `','local','` + elephantID + `','2026-09-01T12:00:00.000000000Z','2026-09-02T12:00:00.000000000Z');`); err != nil {
 		t.Fatal(err)
 	}
 	if err = db.Exec("CREATE TABLE " + table + ` (id TEXT PRIMARY KEY,kind TEXT NOT NULL CHECK(kind IN ('fact','decision','task')),title TEXT NOT NULL,body TEXT NOT NULL,status TEXT NOT NULL,target_version TEXT,start_commit TEXT,end_commit TEXT,created_at TEXT NOT NULL,updated_at TEXT NOT NULL,actor_id TEXT NOT NULL);`); err != nil {

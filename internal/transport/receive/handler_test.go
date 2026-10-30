@@ -7,8 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	"elephant/internal/app"
 	"elephant/internal/storage/zova"
@@ -21,7 +20,7 @@ func TestMachineBoundary(t *testing.T) {
 	}
 	defer db.Close()
 	s := app.New(db)
-	id := func() string { return uuid.Must(uuid.NewV7()).String() }
+	id := func() string { return uuid.NewV7().String() }
 	m := app.Message{ProtocolVersion: 1, MessageID: id(), SenderElephantID: id(), Project: app.ProjectRef{Identity: "github.com/test/repo", Name: "repo"}, Operation: "project.ensure"}
 	data, _ := json.Marshal(m)
 	for _, tc := range []struct {

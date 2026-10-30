@@ -7,8 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	"elephant/internal/app"
 	"elephant/internal/model"
@@ -46,7 +45,7 @@ func TestInboxDiffAdopt(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	id := func() string { return uuid.Must(uuid.NewV7()).String() }
+	id := func() string { return uuid.NewV7().String() }
 	now := time.Now().UTC()
 	senderA, senderB := id(), id()
 	mk := func(sender, msgID, entryID, title, body string, files []string, relations []app.RelationInput) app.Message {
@@ -117,7 +116,7 @@ func TestInboxDiffAdopt(t *testing.T) {
 		t.Fatalf("%+v %v", diffB, err)
 	}
 	// Unknown source fails cleanly.
-	if _, err = s.Adopt(ctx, cwd, entryB, uuid.Must(uuid.NewV7()).String()); err == nil {
+	if _, err = s.Adopt(ctx, cwd, entryB, uuid.NewV7().String()); err == nil {
 		t.Fatal("adopt from unknown source accepted")
 	}
 	// Local recall never includes remote rows.

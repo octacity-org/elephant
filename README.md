@@ -28,7 +28,7 @@ You can download and inspect `install.sh` before executing it. Installation does
 
 ## Build from source
 
-Requirements: Go 1.26.5 or newer, Git, a C compiler, and the native Zova C ABI matching the pinned Go binding (`v1.3.0`). The Go binding does not download or build the native library.
+Requirements: Go 1.27.3 or newer, Git, a C compiler, and the native Zova C ABI matching the pinned Go binding (`v1.3.0`). The Go binding does not download or build the native library.
 
 Obtain the matching native library from [Zova](https://github.com/ata-sesli/zova), or build that version with `zig build c-abi` in its source checkout. Then, from the Elephant directory:
 

@@ -4,13 +4,12 @@ import (
 	"fmt"
 	"strings"
 	"time"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	"elephant/internal/model"
 )
 
-func newID() string { return uuid.Must(uuid.NewV7()).String() }
+func newID() string { return uuid.NewV7().String() }
 func (t *transaction) migrate() error {
 	if err := t.db.Exec(`CREATE TABLE project_tables(id TEXT PRIMARY KEY,project_identity TEXT NOT NULL,project_name TEXT NOT NULL,table_name TEXT NOT NULL UNIQUE,scope TEXT NOT NULL,source_elephant_id TEXT NOT NULL,created_at TEXT NOT NULL,updated_at TEXT NOT NULL,UNIQUE(project_identity,source_elephant_id));
  CREATE TABLE remotes(id TEXT PRIMARY KEY,name TEXT NOT NULL UNIQUE,backend TEXT NOT NULL,backend_config TEXT NOT NULL,elephant_id TEXT NOT NULL,created_at TEXT NOT NULL,updated_at TEXT NOT NULL);

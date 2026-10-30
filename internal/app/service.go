@@ -9,8 +9,7 @@ import (
 	"path"
 	"strings"
 	"time"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	gitrepo "elephant/internal/git"
 	"elephant/internal/model"
@@ -77,10 +76,7 @@ func resolve(tx storage.Tx, g gitrepo.Metadata) (model.Project, error) {
 	if !errors.Is(err, model.ErrProjectNotFound) {
 		return p, err
 	}
-	id, err := uuid.NewV7()
-	if err != nil {
-		return p, err
-	}
+	id := uuid.NewV7()
 	now := time.Now().UTC()
 	p = model.Project{ID: "prj_" + id.String(), Identity: g.Identity, Name: g.Name, Remote: g.Remote, TableName: "p_" + strings.ReplaceAll(id.String(), "-", ""), CreatedAt: now, UpdatedAt: now}
 	p.Scope = "local"
@@ -160,10 +156,8 @@ func (s *Service) List(ctx context.Context, cwd string, f model.Filter) (out []m
 }
 func (s *Service) Add(ctx context.Context, cwd string, k model.Kind, in CreateInput) (out Record, err error) {
 	err = s.within(ctx, cwd, func(tx storage.Tx, p model.Project, g gitrepo.Metadata) error {
-		id, err := uuid.NewV7()
-		if err != nil {
-			return err
-		}
+		id := uuid.NewV7()
+		var err error
 		now := time.Now().UTC()
 		e := model.Entry{ID: id.String(), ActorID: currentActor(), Kind: k, Title: in.Title, Body: in.Body, Status: model.DefaultStatus(k), TargetVersion: in.TargetVersion, StartCommit: optional(g.Head), CreatedAt: now, UpdatedAt: now}
 		if err = e.Validate(); err != nil {

@@ -6,8 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	gitrepo "elephant/internal/git"
 	"elephant/internal/model"
@@ -262,10 +261,7 @@ func (s *Service) Adopt(ctx context.Context, cwd, entryID, selector string) (out
 		if err != nil {
 			return err
 		}
-		id, err := uuid.NewV7()
-		if err != nil {
-			return err
-		}
+		id := uuid.NewV7()
 		now := time.Now().UTC()
 		// The adopted entry keeps its lifecycle state, except that a decision
 		// is superseded locally only through a supersedes edge: adopting its
@@ -364,10 +360,7 @@ func (s *Service) Adopt(ctx context.Context, cwd, entryID, selector string) (out
 		if err != nil {
 			return err
 		}
-		adoptID, err := uuid.NewV7()
-		if err != nil {
-			return err
-		}
+		adoptID := uuid.NewV7()
 		if err = tx.RecordAdoption(model.Adoption{ID: adoptID.String(), ProjectIdentity: g.Identity, SourceElephantID: src.SourceElephantID, SourceEntryID: remote.ID, LocalEntryID: e.ID, Kind: string(e.Kind), CreatedAt: now}); err != nil {
 			return err
 		}

@@ -12,11 +12,11 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"uuid"
 
 	"elephant/internal/app"
 	"elephant/internal/model"
 	"elephant/internal/storage/zova"
-	"github.com/google/uuid"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
 	transport "elephant/internal/transport/mcp"
@@ -190,7 +190,7 @@ func TestReceiveProcessAndRemoteRecall(t *testing.T) {
 			t.Fatal(string(out), err)
 		}
 	}
-	id := func() string { return uuid.Must(uuid.NewV7()).String() }
+	id := func() string { return uuid.NewV7().String() }
 	now := time.Now().UTC()
 	sender := id()
 	m := app.Message{ProtocolVersion: 1, MessageID: id(), SenderElephantID: sender, Project: app.ProjectRef{Identity: "github.com/test/cli", Name: "cli"}, Operation: "entry.send", Entry: &model.Entry{ID: id(), Kind: model.Decision, Title: "Remote choice", Body: "Rationale", ActorID: "claude-session", Status: "active", CreatedAt: now, UpdatedAt: now}}

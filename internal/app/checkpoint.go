@@ -5,8 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"time"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	gitrepo "elephant/internal/git"
 	"elephant/internal/model"
@@ -42,10 +41,8 @@ func (s *Service) AddCheckpoint(ctx context.Context, cwd string, in CheckpointIn
 		if len(in.RelatedFiles)+len(in.Relations) > 99 {
 			return fmt.Errorf("%w: at most 99 related files and entries per checkpoint", model.ErrInvalidInput)
 		}
-		id, err := uuid.NewV7()
-		if err != nil {
-			return err
-		}
+		id := uuid.NewV7()
+		var err error
 		now := time.Now().UTC()
 		start := in.StartCommit
 		if start == "" {

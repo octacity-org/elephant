@@ -8,8 +8,7 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	"elephant/internal/app"
 	"elephant/internal/model"
@@ -52,10 +51,10 @@ func sendAdoptable(t *testing.T, ctx context.Context, s *app.Service, sender, ti
 func sendAdoptableKind(t *testing.T, ctx context.Context, s *app.Service, kind model.Kind, sender, title, body string, files []string, relations []app.RelationInput) string {
 	t.Helper()
 	now := time.Now().UTC()
-	m := app.Message{ProtocolVersion: 1, MessageID: uuid.Must(uuid.NewV7()).String(), SenderElephantID: sender,
+	m := app.Message{ProtocolVersion: 1, MessageID: uuid.NewV7().String(), SenderElephantID: sender,
 		Project:   app.ProjectRef{Identity: "github.com/test/shared", Name: "shared"},
 		Operation: "entry.send",
-		Entry:     &model.Entry{ID: uuid.Must(uuid.NewV7()).String(), Kind: kind, Title: title, Body: body, Status: model.DefaultStatus(kind), ActorID: "peer", CreatedAt: now, UpdatedAt: now},
+		Entry:     &model.Entry{ID: uuid.NewV7().String(), Kind: kind, Title: title, Body: body, Status: model.DefaultStatus(kind), ActorID: "peer", CreatedAt: now, UpdatedAt: now},
 		Files:     files, Relations: relations}
 	resp, err := s.Receive(ctx, m)
 	if err != nil {
@@ -70,7 +69,7 @@ func TestAdoptLinkFailureRollsBack(t *testing.T) {
 	touchFiles(t, cwd, "a.go")
 	store := newFakeStore()
 	s := app.New(store)
-	sender := uuid.Must(uuid.NewV7()).String()
+	sender := uuid.NewV7().String()
 	entryID := sendAdoptable(t, ctx, s, sender, "rolled back", "never lands", []string{"a.go"}, nil)
 
 	store.failLinkPrefix = "file:"
@@ -131,7 +130,7 @@ func TestAdoptSkipsUnsafeAndMissingFileTargets(t *testing.T) {
 
 	store := newFakeStore()
 	s := app.New(store)
-	sender := uuid.Must(uuid.NewV7()).String()
+	sender := uuid.NewV7().String()
 	touchFiles(t, cwd, "a.go")
 	entryID := sendAdoptable(t, ctx, s, sender, "mixed files", "some skip, one lands",
 		[]string{"a.go", "escape/secret.txt", "gone.go"}, nil)
@@ -162,7 +161,7 @@ func TestAdoptIdempotentAndMultiSender(t *testing.T) {
 	touchFiles(t, cwd, "a.go", "b.go")
 	store := newFakeStore()
 	s := app.New(store)
-	senderA, senderB := uuid.Must(uuid.NewV7()).String(), uuid.Must(uuid.NewV7()).String()
+	senderA, senderB := uuid.NewV7().String(), uuid.NewV7().String()
 
 	entryA := sendAdoptable(t, ctx, s, senderA, "A fact", "from A", []string{"a.go"}, nil)
 	entryB := sendAdoptable(t, ctx, s, senderB, "B fact", "from B", []string{"b.go"}, nil)
@@ -196,7 +195,7 @@ func TestAdoptRelationTargetsSkippedAndMapped(t *testing.T) {
 	cwd := adoptRepo(t)
 	store := newFakeStore()
 	s := app.New(store)
-	sender := uuid.Must(uuid.NewV7()).String()
+	sender := uuid.NewV7().String()
 
 	// A decision and a fact supporting it, sent by the same peer.
 	decID := sendAdoptableKind(t, ctx, s, model.Decision, sender, "D", "why", nil, nil)
@@ -233,7 +232,7 @@ func TestDiffSeparatesRemoteOnlyAndConflicting(t *testing.T) {
 	cwd := adoptRepo(t)
 	store := newFakeStore()
 	s := app.New(store)
-	sender := uuid.Must(uuid.NewV7()).String()
+	sender := uuid.NewV7().String()
 
 	// One entry only the sender has, plus a duplicate of local knowledge:
 	// same kind, title, and body under a different remote ID.
