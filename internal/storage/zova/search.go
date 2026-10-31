@@ -18,7 +18,8 @@ func escapeLike(s string) string {
 	return s
 }
 
-// Search implements deterministic bounded text retrieval with LIKE. Results
+// Search implements deterministic bounded text retrieval with LIKE: every
+// query term must appear in the title or the body. Results
 // sort newest first with ID tie-break; callers bound page size.
 func (t *transaction) Search(p model.Project, q model.SearchQuery) ([]model.Entry, error) {
 	name, err := table(p)
@@ -64,8 +65,12 @@ func (t *transaction) Search(p model.Project, q model.SearchQuery) ([]model.Entr
 		sql += " AND updated_at<=?"
 		args = append(args, stamp(*q.UpdatedBefore))
 	}
-	if strings.TrimSpace(q.Query) != "" {
-		like := "%" + escapeLike(strings.TrimSpace(q.Query)) + "%"
+	terms, err := model.SearchTerms(q.Query)
+	if err != nil {
+		return nil, err
+	}
+	for _, term := range terms {
+		like := "%" + escapeLike(term) + "%"
 		sql += ` AND (title LIKE ? ESCAPE '\' OR body LIKE ? ESCAPE '\')`
 		args = append(args, like, like)
 	}

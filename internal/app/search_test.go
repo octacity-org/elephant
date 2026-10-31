@@ -96,6 +96,70 @@ func TestSearchRelatedHistory(t *testing.T) {
 	}
 }
 
+// A multi-word query matches entries containing every word, in any order and
+// in either the title or the body; a quoted phrase must appear as written.
+func TestSearchMatchesAllTerms(t *testing.T) {
+	ctx := context.Background()
+	cwd := searchRepo(t)
+	db, err := zova.Open(filepath.Join(t.TempDir(), "terms.zova"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	s := app.New(db)
+	both, err := s.Add(ctx, cwd, model.Fact, app.CreateInput{Title: "Resolve node_key_for_id lookups", Body: "The edge type HANDLES points at routes"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.Add(ctx, cwd, model.Fact, app.CreateInput{Title: "node_key_for_id only", Body: "No edge type here"}); err != nil {
+		t.Fatal(err)
+	}
+	literal, err := s.Add(ctx, cwd, model.Fact, app.CreateInput{Title: "Coverage at 100% for a_b", Body: "Literal wildcards"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.Add(ctx, cwd, model.Fact, app.CreateInput{Title: "Coverage at 1000 for aXb", Body: "Wildcards would match this"}); err != nil {
+		t.Fatal(err)
+	}
+	ids := func(query string) []string {
+		t.Helper()
+		res, err := s.Search(ctx, cwd, app.SearchFilters{Query: query})
+		if err != nil {
+			t.Fatalf("%q: %v", query, err)
+		}
+		out := []string{}
+		for _, r := range res {
+			out = append(out, r.Entry.ID)
+		}
+		return out
+	}
+	for query, want := range map[string][]string{
+		"node_key_for_id HANDLES":     {both.Entry.ID},
+		"handles NODE_KEY_FOR_ID":     {both.Entry.ID},
+		`"edge type HANDLES"`:         {both.Entry.ID},
+		`"type edge"`:                 {},
+		"node_key_for_id missingword": {},
+		"100% a_b":                    {literal.Entry.ID},
+	} {
+		if got := ids(query); strings.Join(got, ",") != strings.Join(want, ",") {
+			t.Fatalf("%q: got %v want %v", query, got, want)
+		}
+	}
+	for _, query := range []string{"lookups HANDLES", "HANDLES lookups"} {
+		res, err := s.Search(ctx, cwd, app.SearchFilters{Query: query})
+		if err != nil || len(res) != 1 || strings.Join(res[0].Match, ",") != "body,title" {
+			t.Fatalf("%q: %+v %v", query, res, err)
+		}
+	}
+	res, err := s.Search(ctx, cwd, app.SearchFilters{Query: "node_key_for_id resolve"})
+	if err != nil || len(res) != 1 || strings.Join(res[0].Match, ",") != "title" {
+		t.Fatalf("%+v %v", res, err)
+	}
+	if _, err = s.Search(ctx, cwd, app.SearchFilters{Query: strings.Repeat("w ", model.MaxSearchTerms+1)}); !errors.Is(err, model.ErrInvalidInput) {
+		t.Fatalf("too many terms: %v", err)
+	}
+}
+
 func TestSearchPerformance(t *testing.T) {
 	ctx := context.Background()
 	cwd := searchRepo(t)

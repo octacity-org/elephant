@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -229,7 +230,10 @@ func (s *Service) Search(ctx context.Context, cwd string, f SearchFilters) (out 
 	if limit == 0 {
 		limit = 20
 	}
-	lower := strings.ToLower(strings.TrimSpace(f.Query))
+	terms, err := model.SearchTerms(strings.ToLower(f.Query))
+	if err != nil {
+		return nil, err
+	}
 	g, err := gitrepo.Inspect(ctx, cwd)
 	if err != nil {
 		return nil, err
@@ -326,13 +330,12 @@ func (s *Service) Search(ctx context.Context, cwd string, f SearchFilters) (out 
 			}
 			for _, e := range entries {
 				match := []string{}
-				if lower != "" {
-					if strings.Contains(strings.ToLower(e.Title), lower) {
-						match = append(match, "title")
-					}
-					if strings.Contains(strings.ToLower(e.Body), lower) {
-						match = append(match, "body")
-					}
+				title, body := strings.ToLower(e.Title), strings.ToLower(e.Body)
+				if slices.ContainsFunc(terms, func(term string) bool { return strings.Contains(title, term) }) {
+					match = append(match, "title")
+				}
+				if slices.ContainsFunc(terms, func(term string) bool { return strings.Contains(body, term) }) {
+					match = append(match, "body")
 				}
 				if f.Actor != "" && e.ActorID == f.Actor {
 					match = append(match, "actor")
