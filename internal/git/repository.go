@@ -288,6 +288,68 @@ func IsAncestor(ctx context.Context, root, ancestor, commit string) (bool, error
 	return true, nil
 }
 
+// Behind compares a recorded commit with head. It reports how many commits
+// head has that commit lacks, and whether commit is head or an ancestor of
+// it. A commit that is not a full object name, or that Git cannot find
+// because history was rewritten or collected, is reported as not an
+// ancestor rather than as an error.
+func Behind(ctx context.Context, root, commit, head string) (int, bool, error) {
+	if !isObjectName(commit) {
+		return 0, false, nil
+	}
+	if commit == head {
+		return 0, true, nil
+	}
+	out, err := runGit(ctx, root, "rev-list", "--left-right", "--count", commit+"..."+head, "--")
+	if err != nil {
+		if ctx.Err() != nil {
+			return 0, false, ctx.Err()
+		}
+		// rev-list exits 128 for an unknown revision.
+		if exitCode(err) == 128 {
+			return 0, false, nil
+		}
+		return 0, false, err
+	}
+	var only, behind int
+	if _, err := fmt.Sscanf(out, "%d\t%d", &only, &behind); err != nil {
+		return 0, false, fmt.Errorf("git rev-list: unexpected output %q", out)
+	}
+	return behind, only == 0, nil
+}
+
+// ChangedBetween lists, sorted, the root-relative paths whose content differs
+// between the trees of from and to. A rename is reported as both its old and
+// new path, so memory linked to either still matches.
+func ChangedBetween(ctx context.Context, root, from, to string) ([]string, error) {
+	out, err := runGitBytes(ctx, root, "diff", "--name-only", "-z", "--no-renames", "--no-ext-diff", from, to, "--")
+	if err != nil {
+		return nil, err
+	}
+	var paths []string
+	for path := range strings.SplitSeq(string(out), "\x00") {
+		if path != "" {
+			paths = append(paths, path)
+		}
+	}
+	sort.Strings(paths)
+	return paths, nil
+}
+
+// isObjectName reports whether s is a full SHA-1 or SHA-256 object name, so
+// it can be passed to Git without being read as an option or revision syntax.
+func isObjectName(s string) bool {
+	if len(s) != 40 && len(s) != 64 {
+		return false
+	}
+	for _, c := range s {
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
+			return false
+		}
+	}
+	return true
+}
+
 func isNotRepository(err error) bool {
 	var commandErr *commandError
 	if !errors.As(err, &commandErr) {
