@@ -24,6 +24,7 @@ func isolatedHome(t *testing.T) (string, string) {
 	t.Setenv("USERPROFILE", home)
 	t.Setenv("CODEX_HOME", filepath.Join(home, "codex"))
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, "config"))
+	t.Setenv("CLAUDE_CONFIG_DIR", "")
 	database := filepath.Join(home, "data", "elephant.zova")
 	t.Setenv("ELEPHANT_DB", database)
 	return home, database
@@ -253,5 +254,61 @@ func TestDoctorChecksRegistrationsWithoutChangingTheDatabase(t *testing.T) {
 	}
 	if backups, _ := filepath.Glob(filepath.Join(filepath.Dir(database), "*backup*")); len(backups) != 0 {
 		t.Fatalf("doctor migrated the database: %v", backups)
+	}
+}
+
+// Hooks are opt-in: setup installs one only with --hooks, and doctor treats a
+// missing hook as fine but warns about one that runs another installation.
+func TestSetupHooksAndDoctor(t *testing.T) {
+	home, _ := isolatedHome(t)
+	ctx := context.Background()
+	var out, logs bytes.Buffer
+	doctor := func() diagnosticReport {
+		t.Helper()
+		out.Reset()
+		run(ctx, []string{"doctor", "--json"}, &out, &logs)
+		return decodeReport(t, out.Bytes())
+	}
+	if report := doctor(); checkStatus(t, report, "hooks") != statusOK || !strings.Contains(checkDetail(report, "hooks"), "none installed") {
+		t.Fatalf("no hooks: %+v", report.Checks)
+	}
+
+	out.Reset()
+	if err := run(ctx, []string{"setup", "claude-code", "--hooks"}, &out, &logs); err != nil {
+		t.Fatal(err)
+	}
+	settings := filepath.Join(home, ".claude", "settings.json")
+	for _, want := range []string{"configured claude-code at " + filepath.Join(home, ".claude.json"), "session hook: " + settings, "recall --brief", "installed the session-start hook"} {
+		if !strings.Contains(out.String(), want) {
+			t.Fatalf("missing %q in:\n%s", want, out.String())
+		}
+	}
+	if content, err := os.ReadFile(settings); err != nil || !strings.Contains(string(content), `"SessionStart"`) {
+		t.Fatalf("%s %v", content, err)
+	}
+	report := doctor()
+	if checkStatus(t, report, "hooks") != statusOK || !strings.Contains(checkDetail(report, "hooks"), "claude-code") || checkStatus(t, report, "mcp") != statusOK {
+		t.Fatalf("installed hook: %+v", report.Checks)
+	}
+
+	out.Reset()
+	if err := run(ctx, []string{"setup", "codex", "--hooks"}, &out, &logs); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "/hooks") {
+		t.Fatalf("missing the Codex trust note:\n%s", out.String())
+	}
+
+	// A hook for another database is stale for this installation.
+	if err := run(ctx, []string{"--db", filepath.Join(home, "other.zova"), "setup", "claude-code", "--hooks"}, &out, &logs); err != nil {
+		t.Fatal(err)
+	}
+	report = doctor()
+	if checkStatus(t, report, "hooks") != statusWarning || !strings.Contains(checkDetail(report, "hooks"), "other.zova") {
+		t.Fatalf("stale hook: %+v", report.Checks)
+	}
+
+	if err := run(ctx, []string{"setup", "opencode", "--hooks"}, &out, &logs); !errors.Is(err, model.ErrInvalidInput) {
+		t.Fatalf("opencode --hooks: %v", err)
 	}
 }
