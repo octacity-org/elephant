@@ -39,7 +39,7 @@ Usage: elephant [--cwd DIR] [--db FILE.zova] COMMAND
   serve                 Run the MCP stdio server (also the default command)
   setup AGENT           Register the MCP server with codex or opencode
   doctor [--json]       Diagnose executable, database, Git, MCP, actor, remotes
-  recall                Show saved project context and unfinished work
+  recall [--brief]      Show saved project context and unfinished work
   identity              Show this installation’s stable Elephant ID
   remote                Manage peers, ensure projects, send entries, or fetch state
   receive               Process one machine JSON message from stdin
@@ -88,6 +88,8 @@ reports unchanged, changed, missing, or unavailable and never retires a fact.
 the receiver re-verifies it against its own checkout on recall.
 recall includes the latest checkpoint before older project context, and
 changed_files lists uncommitted files that have linked entries.
+recall --brief prints a short text digest for session-start hooks. It never
+creates the database or a project, and prints nothing when there is no memory.
 Export output is deterministic for unchanged state; import validates fully
 before committing and never overwrites local truth.
 Review is read-only and deterministic; thresholds default to 30/90/30 days.
@@ -182,11 +184,32 @@ func run(ctx context.Context, args []string, out, logs io.Writer) error {
 		command = rest[0]
 		rest = rest[1:]
 	}
+	var recallSource string
 	switch command {
 	case "setup":
 		return runSetup(ctx, out, logs, rest, *dbPath)
 	case "doctor":
 		return runDoctor(ctx, out, logs, rest, *dbPath)
+	case "recall":
+		// Flags are parsed before the database opens, because --brief must
+		// not create a missing database.
+		f := flag.NewFlagSet("recall", flag.ContinueOnError)
+		f.SetOutput(logs)
+		source := f.String("remote", "", "source Elephant UUID or registered name")
+		brief := f.Bool("brief", false, "print a short text digest, or nothing when there is no memory")
+		if err := parseFlags(f, rest); err != nil {
+			return err
+		}
+		if f.NArg() != 0 {
+			return model.ErrInvalidInput
+		}
+		if *brief {
+			if *source != "" {
+				return fmt.Errorf("%w: --brief reads local memory only; drop --remote", model.ErrInvalidInput)
+			}
+			return runBrief(ctx, out, *cwd, *dbPath)
+		}
+		recallSource = *source
 	}
 	db, err := zova.Open(*dbPath)
 	if err != nil {
@@ -214,19 +237,10 @@ func run(ctx context.Context, args []string, out, logs io.Writer) error {
 		}
 		return transport.New(service, *cwd).Run(ctx, &sdk.StdioTransport{})
 	case "recall":
-		f := flag.NewFlagSet("recall", flag.ContinueOnError)
-		f.SetOutput(logs)
-		source := f.String("remote", "", "source Elephant UUID or registered name")
-		if err = parseFlags(f, rest); err != nil {
-			return err
-		}
-		if f.NArg() != 0 {
-			return model.ErrInvalidInput
-		}
-		if *source == "" {
+		if recallSource == "" {
 			result, err = service.Recall(ctx, *cwd, "")
 		} else {
-			result, err = service.RecallRemote(ctx, *cwd, *source)
+			result, err = service.RecallRemote(ctx, *cwd, recallSource)
 		}
 	case "evidence":
 		result, err = runEvidence(ctx, service, *cwd, rest, logs)

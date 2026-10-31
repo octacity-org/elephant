@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"strings"
 	"time"
@@ -70,6 +71,30 @@ const (
 
 func (s *Service) Recall(ctx context.Context, cwd, version string) (out RecallResult, err error) {
 	return s.recallWith(ctx, version, func(fn func(storage.Tx, model.Project, gitrepo.Metadata) error) error { return s.within(ctx, cwd, fn) })
+}
+
+// RecallExisting recalls the repository's project only when it is already
+// known, reporting found=false otherwise. Unlike Recall it never creates a
+// project record, so it can run in any repository, as session hooks do.
+func (s *Service) RecallExisting(ctx context.Context, cwd string) (out RecallResult, found bool, err error) {
+	out, err = s.recallWith(ctx, "", func(fn func(storage.Tx, model.Project, gitrepo.Metadata) error) error {
+		g, err := gitrepo.Inspect(ctx, cwd)
+		if err != nil {
+			return err
+		}
+		return s.store.Transact(ctx, func(tx storage.Tx) error {
+			p, err := tx.Project(g.Identity)
+			if errors.Is(err, model.ErrProjectNotFound) {
+				return nil
+			}
+			if err != nil {
+				return err
+			}
+			found = true
+			return fn(tx, p, g)
+		})
+	})
+	return
 }
 func (s *Service) recallWith(ctx context.Context, version string, within func(func(storage.Tx, model.Project, gitrepo.Metadata) error) error) (out RecallResult, err error) {
 	out = RecallResult{Tasks: []model.Entry{}, Decisions: []model.Entry{}, Facts: []model.Entry{}, Evidence: []EvidenceView{}, RecentCompleted: []model.Entry{}, RecentSuperseded: []model.Entry{}, Relations: []model.Relation{}, ChangedFiles: []ChangedFile{}, Staleness: []Staleness{}, Truncated: map[string]bool{}}
