@@ -3,6 +3,7 @@ package app_test
 import (
 	"context"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -223,7 +224,10 @@ func (t *fakeTx) Search(p model.Project, q model.SearchQuery) ([]model.Entry, er
 	if q.Offset < 0 {
 		return nil, model.ErrInvalidInput
 	}
-	query := strings.ToLower(strings.TrimSpace(q.Query))
+	terms, err := model.SearchTerms(strings.ToLower(q.Query))
+	if err != nil {
+		return nil, err
+	}
 	m := t.st.entries[p.TableName]
 	out := make([]model.Entry, 0, len(m))
 	for _, e := range m {
@@ -245,7 +249,9 @@ func (t *fakeTx) Search(p model.Project, q model.SearchQuery) ([]model.Entry, er
 		if q.UpdatedBefore != nil && e.UpdatedAt.After(*q.UpdatedBefore) {
 			continue
 		}
-		if query != "" && !strings.Contains(strings.ToLower(e.Title), query) && !strings.Contains(strings.ToLower(e.Body), query) {
+		if slices.ContainsFunc(terms, func(term string) bool {
+			return !strings.Contains(strings.ToLower(e.Title), term) && !strings.Contains(strings.ToLower(e.Body), term)
+		}) {
 			continue
 		}
 		out = append(out, e)

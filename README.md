@@ -203,6 +203,8 @@ elephant related ENTRY_ID --direction both --edge implements --depth 1
 elephant history path/to/file.go --limit 20
 ```
 
+The query is split into words, and an entry matches when every word appears in its title or body, in any order. Each word is a case-insensitive substring match, so `node_key_for_id HANDLES` finds an entry with the function name in the title and the edge type in the body. Put a phrase in double quotes to require those words together as written, as in `elephant search '"edge type" HANDLES'`. A query may contain at most 16 terms.
+
 Search is project-scoped (use `--remote SRC` for a received table), composes kind/status/actor/version/file/time filters across CLI and MCP, and returns stable ordering with match metadata. Commit filters form an inclusive Git commit range resolved against the local repository: `--commit-start`/`--commit-end` bound it and `--commit C` selects entries active at a single commit, matching entries whose recorded `start_commit`/`end_commit` interval intersects the range; a bound that does not resolve to a commit fails the query instead of degrading to an equality match, and the start bound must be equal to or an ancestor of the end bound (reversed or divergent endpoints are rejected with a clear error). Graph traversal is bounded (direction, edge, depth 1–3, limit 1–50) and never crosses project or remote ownership. MCP adds `search_entries`, `related_entries`, and `file_history`.
 
 ## Model and lifecycle
