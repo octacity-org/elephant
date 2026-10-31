@@ -37,8 +37,8 @@ type diagnosticReport struct {
 
 func detail(err error) string { return transport.PublicError(err).Error() }
 
-// diagnose checks installation, storage, Git, MCP registration, actor, and
-// remote configuration. It never returns an error so doctor can report every
+// diagnose checks installation, storage, Git, MCP registration, actor,
+// session hooks, and remote configuration. It never returns an error so doctor can report every
 // finding at once.
 func diagnose(ctx context.Context, dbPath string) diagnosticReport {
 	checks := []diagnosticCheck{}
@@ -83,6 +83,9 @@ func diagnose(ctx context.Context, dbPath string) diagnosticReport {
 		checks = append(checks, mcpCheck(executable, dbPath, registered, problems))
 	}
 	checks = append(checks, actorCheck(registered))
+	if executable != "" {
+		checks = append(checks, hooksCheck(agent.HookCommand(executable, dbPath)))
+	}
 	if store == nil {
 		add("remotes", statusWarning, "skipped because the database is unavailable or awaits migration")
 	} else if remotes, remoteErr := app.New(store).ListRemotes(ctx); remoteErr != nil {
@@ -152,6 +155,33 @@ func mcpCheck(executable, database string, registered []agent.State, problems []
 		return diagnosticCheck{Name: "mcp", Status: statusWarning, Detail: strings.Join(stale, "; ") + ". This installation's launch command: " + command}
 	}
 	return diagnosticCheck{Name: "mcp", Status: statusOK, Detail: "configured for " + strings.Join(configured, ", ") + "; launch command: " + command}
+}
+
+// hooksCheck reports Elephant's session-start hooks. They are optional, so
+// none installed is fine; a hook that runs another binary or database is not.
+func hooksCheck(expected string) diagnosticCheck {
+	var installed, stale, problems []string
+	for _, name := range agent.HookNames() {
+		state, err := agent.InspectHook(name, nil)
+		switch {
+		case err != nil:
+			problems = append(problems, name+": "+detail(err))
+		case !state.Installed:
+		case state.Command != expected:
+			stale = append(stale, fmt.Sprintf("%s runs %q; run elephant setup %s --hooks", state.Agent, state.Command, state.Agent))
+		default:
+			installed = append(installed, state.Agent+" ("+state.Path+")")
+		}
+	}
+	switch {
+	case len(problems) > 0:
+		return diagnosticCheck{Name: "hooks", Status: statusError, Detail: strings.Join(problems, "; ")}
+	case len(stale) > 0:
+		return diagnosticCheck{Name: "hooks", Status: statusWarning, Detail: strings.Join(stale, "; ") + ". This installation's hook command: " + expected}
+	case len(installed) == 0:
+		return diagnosticCheck{Name: "hooks", Status: statusOK, Detail: "none installed; they are optional (elephant setup AGENT --hooks)"}
+	}
+	return diagnosticCheck{Name: "hooks", Status: statusOK, Detail: "session-start hook installed for " + strings.Join(installed, ", ")}
 }
 
 // actorCheck reports the actor each registered agent records. Agents launch

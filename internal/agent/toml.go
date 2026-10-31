@@ -291,14 +291,20 @@ func setTOMLKey(lines []string, path []string, key, value string) []string {
 		if tomlSameValue(entry.value, value) {
 			return lines
 		}
-		first, last := lines[entry.start], lines[entry.end-1]
-		replaced := first[:strings.IndexByte(first, '=')+1] + " " + value
-		if comment := last[len(stripTOMLComment(last)):]; comment != "" {
-			replaced += " " + comment
-		}
-		return slices.Replace(lines, entry.start, entry.end, replaced)
+		return replaceTOMLEntry(lines, entry, value)
 	}
 	return slices.Insert(lines, at, line)
+}
+
+// replaceTOMLEntry replaces an entry's value, keeping its line's indentation,
+// key, and trailing comment.
+func replaceTOMLEntry(lines []string, entry tomlEntry, value string) []string {
+	first, last := lines[entry.start], lines[entry.end-1]
+	replaced := first[:strings.IndexByte(first, '=')+1] + " " + value
+	if comment := last[len(stripTOMLComment(last)):]; comment != "" {
+		replaced += " " + comment
+	}
+	return slices.Replace(lines, entry.start, entry.end, replaced)
 }
 
 // tomlSameValue reports whether two values decode to the same strings.

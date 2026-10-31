@@ -17,6 +17,8 @@ type Input struct {
 	Database   string
 	ActorID    string
 	ConfigPath string
+	// Hooks also installs Elephant's session-start hook.
+	Hooks bool
 }
 
 // Result reports what setup changed for one agent.
@@ -29,6 +31,11 @@ type Result struct {
 	Changed    bool     `json:"changed"`
 	Configured bool     `json:"configured"`
 	Manual     string   `json:"manual,omitempty"`
+	// HookPath and HookCommand are set when hooks were requested.
+	HookPath    string   `json:"hook_path,omitempty"`
+	HookCommand string   `json:"hook_command,omitempty"`
+	HookChanged bool     `json:"hook_changed"`
+	Notes       []string `json:"notes,omitempty"`
 }
 
 // State reports the Elephant entry currently present in an agent configuration.
@@ -177,6 +184,9 @@ func Configure(in Input, env Env) (Result, error) {
 		}
 	}
 	target, err := Lookup(name)
+	if in.Hooks && (err != nil || target.HookPath == nil) {
+		return out, fmt.Errorf("%w: session hooks are supported for %s", model.ErrInvalidInput, strings.Join(HookNames(), " and "))
+	}
 	if err != nil {
 		manualActor := out.ActorID
 		if manualActor == "" {
@@ -219,11 +229,49 @@ func Configure(in Input, env Env) (Result, error) {
 	}
 	out.ConfigPath, out.Command, out.Created, out.Configured = path, command, !existed, true
 	out.Changed = updated != content
-	if !out.Changed {
+	if !in.Hooks {
+		if out.Changed {
+			return out, writeFile(path, updated, existed)
+		}
 		return out, nil
 	}
-	if err = writeFile(path, updated, existed); err != nil {
+
+	// Both edits are prepared before anything is written. Codex reads hooks
+	// from the same config.toml, so a --config path applies to both and the
+	// hook edit builds on the MCP edit.
+	out.HookCommand = hookCommand(command)
+	hookContent, hookUpdated, hookExisted := updated, "", existed
+	if target.Format == TOML {
+		out.HookPath = path
+		out.Notes = append(out.Notes, "Codex runs a new or changed hook only after you review and trust it in /hooks (Codex 0.129.0 or later).")
+	} else {
+		if out.HookPath, err = target.HookPath(env); err != nil {
+			return out, err
+		}
+		if out.HookPath, err = resolvePath(out.HookPath, "hook configuration path"); err != nil {
+			return out, err
+		}
+		if hookContent, hookExisted, err = readFile(out.HookPath); err != nil {
+			return out, err
+		}
+	}
+	if hookUpdated, err = editHook(target, hookContent, out.HookCommand); err != nil {
 		return out, err
+	}
+	out.HookChanged = hookUpdated != hookContent
+	if target.Format == TOML {
+		if hookUpdated != content {
+			return out, writeFile(path, hookUpdated, existed)
+		}
+		return out, nil
+	}
+	if out.Changed {
+		if err = writeFile(path, updated, existed); err != nil {
+			return out, err
+		}
+	}
+	if out.HookChanged {
+		return out, writeFile(out.HookPath, hookUpdated, hookExisted)
 	}
 	return out, nil
 }
