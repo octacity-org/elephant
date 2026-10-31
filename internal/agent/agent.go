@@ -15,12 +15,15 @@ import (
 // ServerName is Elephant's stable MCP server name in every agent configuration.
 const ServerName = "elephant"
 
-// Format names the configuration file syntax of a supported agent.
+// Format names the configuration file syntax of a supported agent, and for
+// JSON agents the layout of their server entry.
 type Format string
 
 const (
 	TOML Format = "toml"
 	JSON Format = "json"
+	// ClaudeJSON is Claude Code's ~/.claude.json with an mcpServers object.
+	ClaudeJSON Format = "claude-json"
 )
 
 // Env reads environment variables. A nil Env uses the process environment.
@@ -33,16 +36,19 @@ func (e Env) get(key string) string {
 	return e(key)
 }
 
-// Target describes one supported agent integration.
+// Target describes one supported agent integration. HookPath locates the
+// file that holds session hooks; it is nil for agents without them.
 type Target struct {
-	Name   string
-	Format Format
-	Path   func(Env) (string, error)
+	Name     string
+	Format   Format
+	Path     func(Env) (string, error)
+	HookPath func(Env) (string, error)
 }
 
 var targets = []Target{
-	{Name: "codex", Format: TOML, Path: codexPath},
+	{Name: "codex", Format: TOML, Path: codexPath, HookPath: codexPath},
 	{Name: "opencode", Format: JSON, Path: opencodePath},
+	{Name: "claude-code", Format: ClaudeJSON, Path: claudePath, HookPath: claudeSettingsPath},
 }
 
 // Names lists supported agents in display order.
@@ -101,4 +107,28 @@ func opencodePath(env Env) (string, error) {
 		root = filepath.Join(home, ".config")
 	}
 	return filepath.Join(root, "opencode", "opencode.json"), nil
+}
+
+// claudePath resolves ~/.claude.json, where Claude Code keeps user-scope MCP
+// servers. Its documentation does not say that CLAUDE_CONFIG_DIR moves this
+// file, so it is not consulted here; --config selects another file.
+func claudePath(env Env) (string, error) {
+	home, err := homeDir(env)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, ".claude.json"), nil
+}
+
+// claudeSettingsPath resolves Claude Code's user settings.json, which holds
+// hooks, honoring CLAUDE_CONFIG_DIR.
+func claudeSettingsPath(env Env) (string, error) {
+	if root := env.get("CLAUDE_CONFIG_DIR"); root != "" {
+		return filepath.Join(root, "settings.json"), nil
+	}
+	home, err := homeDir(env)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, ".claude", "settings.json"), nil
 }

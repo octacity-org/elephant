@@ -26,6 +26,7 @@ func runSetup(ctx context.Context, out, logs io.Writer, args []string, dbPath st
 	fs.SetOutput(logs)
 	configPath := fs.String("config", "", "write this configuration file instead of the agent default")
 	actor := fs.String("actor", "", "explicit actor identity recorded on new entries")
+	hooks := fs.Bool("hooks", false, "also install a session-start hook that runs recall --brief")
 	structured := fs.Bool("json", false, "print machine-readable output")
 	if len(args) == 0 {
 		return fmt.Errorf("%w: setup requires exactly one agent name (%s)", model.ErrInvalidInput, strings.Join(agent.Names(), ", "))
@@ -41,7 +42,7 @@ func runSetup(ctx context.Context, out, logs io.Writer, args []string, dbPath st
 	if err != nil {
 		return fmt.Errorf("%w: locate the running executable: %v", model.ErrInvalidInput, err)
 	}
-	result, err := agent.Configure(agent.Input{Agent: name, Executable: executable, Database: dbPath, ActorID: *actor, ConfigPath: *configPath}, nil)
+	result, err := agent.Configure(agent.Input{Agent: name, Executable: executable, Database: dbPath, ActorID: *actor, ConfigPath: *configPath, Hooks: *hooks}, nil)
 	if err != nil {
 		return err
 	}
@@ -59,6 +60,18 @@ func runSetup(ctx context.Context, out, logs io.Writer, args []string, dbPath st
 		fmt.Fprintln(out, "wrote the Elephant server entry; unrelated settings were preserved")
 	} else {
 		fmt.Fprintln(out, "already up to date; no changes written")
+	}
+	if result.HookPath != "" {
+		fmt.Fprintf(out, "session hook: %s\n", result.HookPath)
+		fmt.Fprintf(out, "hook command: %s\n", result.HookCommand)
+		if result.HookChanged {
+			fmt.Fprintln(out, "installed the session-start hook; other hooks were preserved")
+		} else {
+			fmt.Fprintln(out, "session-start hook already up to date")
+		}
+	}
+	for _, note := range result.Notes {
+		fmt.Fprintln(out, "note: "+note)
 	}
 	return nil
 }

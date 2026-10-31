@@ -16,8 +16,11 @@ func readState(target Target, path, content string, existed bool) (State, error)
 	if strings.TrimSpace(content) == "" {
 		return state, nil
 	}
-	if target.Format == JSON {
+	switch target.Format {
+	case JSON:
 		return readOpenCodeState(target, path, content, existed)
+	case ClaudeJSON:
+		return readClaudeState(target, path, content, existed)
 	}
 	server, env, err := codexRegistration(content)
 	if err != nil || server == nil {
@@ -40,8 +43,11 @@ func readState(target Target, path, content string, existed bool) (State, error)
 }
 
 func edit(target Target, content string, command []string, actor string) (string, error) {
-	if target.Format == JSON {
+	switch target.Format {
+	case JSON:
 		return editOpenCode(content, command, actor)
+	case ClaudeJSON:
+		return editClaude(content, command, actor)
 	}
 	return setCodexServer(content, command, actor), nil
 }

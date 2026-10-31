@@ -92,11 +92,29 @@ Global flags (`--cwd`, `--db`) precede the command. If omitted, `cwd` is the pro
 ```sh
 elephant setup codex
 elephant setup opencode
+elephant setup claude-code
 ```
 
-Codex uses `$CODEX_HOME/config.toml`, defaulting to `~/.codex/config.toml`, and receives a `[mcp_servers.elephant]` table plus an `[mcp_servers.elephant.env]` table. OpenCode uses `$OPENCODE_CONFIG` or `$XDG_CONFIG_HOME/opencode/opencode.json`, defaulting to `~/.config/opencode/opencode.json`, and receives a `mcp.servers.elephant` object with `"type": "local"` (an older `mcp.elephant` entry is migrated forward). Both entries launch the resolved executable as `elephant --db /path/to/elephant.zova serve` and set an explicit `ELEPHANT_ACTOR_ID` so entries carry provenance. Writes go through a synced temporary file plus atomic rename, so an interrupted setup never leaves a truncated configuration.
+Codex uses `$CODEX_HOME/config.toml`, defaulting to `~/.codex/config.toml`, and receives a `[mcp_servers.elephant]` table plus an `[mcp_servers.elephant.env]` table. OpenCode uses `$OPENCODE_CONFIG` or `$XDG_CONFIG_HOME/opencode/opencode.json`, defaulting to `~/.config/opencode/opencode.json`, and receives a `mcp.servers.elephant` object with `"type": "local"` (an older `mcp.elephant` entry is migrated forward). Claude Code uses `~/.claude.json`, where it keeps user-scope MCP servers, and receives a `mcpServers.elephant` entry with `"type": "stdio"`; setup sets only that entry's `type`, `command`, `args` and `env.ELEPHANT_ACTOR_ID` and leaves the rest of the file, which Claude Code also uses for its own state, untouched. `CLAUDE_CONFIG_DIR` is not consulted for this file because Claude Code's documentation does not say it moves it; pass `--config` to write another file. All entries launch the resolved executable as `elephant --db /path/to/elephant.zova serve` and set an explicit `ELEPHANT_ACTOR_ID` so entries carry provenance. Writes go through a synced temporary file plus atomic rename, so an interrupted setup never leaves a truncated configuration.
 
 Setup edits only Elephant's own entry and preserves every other setting. It is idempotent: running it again with the same command and actor writes nothing. Pass `--actor ID` to choose the identity, or `--config FILE` to write a specific configuration file. Unsupported agents are not modified; the command prints a copy-ready example instead.
+
+### Session-start hook
+
+`--hooks` also installs a hook that runs `elephant recall --brief` when a session starts, so the agent begins with a short digest of the project's memory instead of having to call `recall_project` first:
+
+```sh
+elephant setup claude-code --hooks
+elephant setup codex --hooks
+```
+
+The hook is opt-in: plain `setup` never installs one. It is safe to install globally, because `recall --brief` prints nothing in a repository Elephant does not know or that has no unfinished memory, and it never creates a database or a project. It runs for new, cleared and compacted sessions (matcher `startup|clear|compact`); resumed sessions are skipped because they already carry the earlier context. The timeout is 10 seconds, and a failing hook does not stop the session in either agent.
+
+- Claude Code: the hook goes into `~/.claude/settings.json`, or `$CLAUDE_CONFIG_DIR/settings.json` when that is set, as an extra `hooks.SessionStart` group after any existing ones.
+- Codex: the hook goes into the same `config.toml` as the MCP entry, as a `[[hooks.SessionStart]]` table appended after any existing groups, so groups you already trusted keep their position. Codex 0.124.0 or later reads these hooks, and since 0.129.0 a new or changed hook runs only after you review and trust it in `/hooks`; setup does not trust it for you.
+- OpenCode has no comparable hook, so `--hooks` is rejected for it.
+
+Setup manages only the hook's command: running it again updates the command when the executable or database moved, and leaves a matcher or timeout you edited alone. To remove the hook, delete Elephant's group from the file.
 
 `doctor` reports whether the installation is usable:
 
@@ -105,7 +123,7 @@ elephant doctor
 elephant doctor --json
 ```
 
-The checks cover the executable path and version, database accessibility and schema compatibility, Git availability, which agents have Elephant registered and whether each registration still launches this executable with this database, the actor each registration records (or, with no registration, `ELEPHANT_ACTOR_ID` in the shell), and configured ASH remotes. Each finding is `ok`, `warning`, or `error`: a missing database, a pending migration, an unconfigured agent, a stale registration, an unset actor, and absent remotes are warnings, while an incompatible schema, an unreadable database, or a missing Git is an error. Errors exit nonzero; warnings exit zero. `--json` prints the same checks as a structured object with a top-level `status`. Doctor never changes the database: when a storage format or schema migration is pending, it reports the migration instead of opening the database, and Elephant runs it the next time it opens the database.
+The checks cover the executable path and version, database accessibility and schema compatibility, Git availability, which agents have Elephant registered and whether each registration still launches this executable with this database, the actor each registration records (or, with no registration, `ELEPHANT_ACTOR_ID` in the shell), installed session-start hooks and whether each still runs this executable with this database, and configured ASH remotes. Each finding is `ok`, `warning`, or `error`: a missing database, a pending migration, an unconfigured agent, a stale registration, a stale hook, an unset actor, and absent remotes are warnings, while an incompatible schema, an unreadable database, or a missing Git is an error. Errors exit nonzero; warnings exit zero. `--json` prints the same checks as a structured object with a top-level `status`. Doctor never changes the database: when a storage format or schema migration is pending, it reports the migration instead of opening the database, and Elephant runs it the next time it opens the database.
 
 Tests for both commands point `HOME`, `CODEX_HOME`, and `XDG_CONFIG_HOME` at temporary directories, so they never read or write a developer's real agent configuration.
 
