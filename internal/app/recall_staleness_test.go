@@ -53,6 +53,7 @@ func TestRecallReportsStaleness(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() { db.Close() })
 	s := app.New(db)
 	linked, err := s.Add(ctx, cwd, model.Fact, app.CreateInput{Title: "A", Body: "about a", RelatedFiles: []string{"a.go", "b.go"}})
 	if err != nil {
@@ -114,6 +115,7 @@ func TestRecallStalenessAgeAndMissingCommit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() { db.Close() })
 	s := app.New(db)
 	old, err := s.Add(ctx, cwd, model.Fact, app.CreateInput{Title: "Old", Body: "old"})
 	if err != nil {
@@ -162,6 +164,7 @@ func TestRecallStalenessBoundsCommitChecks(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() { db.Close() })
 	s := app.New(db)
 	for i := range app.RecallStaleCommitLimit + 1 {
 		if _, err = s.Add(ctx, cwd, model.Fact, app.CreateInput{Title: fmt.Sprint("F", i), Body: "b"}); err != nil {
