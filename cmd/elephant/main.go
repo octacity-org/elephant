@@ -60,15 +60,18 @@ Usage: elephant [--cwd DIR] [--db FILE.zova] COMMAND
   backup --output FILE.zova  Write a consistent database snapshot
   search [QUERY] [--kind KIND] [--status STATUS] [--actor ACTOR]
          [--target-version V] [--commit C] [--commit-start C] [--commit-end C]
-         [--updated-after RFC3339] [--updated-before RFC3339] [--file PATH] [--remote SRC]
+         [--updated-after RFC3339] [--updated-before RFC3339] [--file PATH] [--tag TAG ...]
+         [--remote SRC]
+  tags                  List the project's tags with entry counts
   related ENTRY_ID [--direction both|outgoing|incoming] [--edge TYPE] [--depth N]
   history PATH [--limit N]
   review [--json] [--stale-task-days N] [--unverified-fact-days N]
          [--stale-remote-days N]  Deterministic read-only memory health review
   add fact|decision|task --title TEXT --body TEXT [--target-version TEXT] [--file PATH ...]
-                        [--relation TYPE:ENTRY_UUID ...] [--supersedes DECISION_ID]
+                        [--relation TYPE:ENTRY_UUID ...] [--tag TAG ...] [--supersedes DECISION_ID]
   update fact|decision|task ID [--title TEXT] [--body TEXT] [--status STATUS]
          [--target-version TEXT] [--file PATH ... | --clear-files] [--relation TYPE:ENTRY_UUID ...]
+         [--tag TAG ... | --clear-tags]
   complete|cancel TASK_ID  Close a task
   retire FACT_ID        Retire a fact
   supersede DECISION_ID --title TEXT --body TEXT [add flags]  Replace an active decision
@@ -347,6 +350,8 @@ func run(ctx context.Context, args []string, out, logs io.Writer) error {
 		updatedAfter := f.String("updated-after", "", "updated_at >= RFC3339 time (e.g. 2026-09-01T00:00:00Z)")
 		updatedBefore := f.String("updated-before", "", "updated_at <= RFC3339 time")
 		file := f.String("file", "", "file filter, relative to the working directory")
+		var tags fileFlags
+		f.Var(&tags, "tag", "required tag; repeatable")
 		source := f.String("remote", "", "source Elephant UUID or registered name")
 		limit := f.Int("limit", 20, "maximum results (1-50)")
 		offset := f.Int("offset", 0, "pagination offset")
@@ -375,7 +380,7 @@ func run(ctx context.Context, args []string, out, logs io.Writer) error {
 		if f.NArg() == 1 {
 			query = f.Arg(0)
 		}
-		result, err = service.Search(ctx, *cwd, app.SearchFilters{Query: query, Kind: model.Kind(*kind), Status: *status, Actor: *actor, TargetVersion: *version, Commit: *commit, CommitStart: *commitStart, CommitEnd: *commitEnd, File: *file, Source: *source, UpdatedAfter: after, UpdatedBefore: before, Limit: *limit, Offset: *offset})
+		result, err = service.Search(ctx, *cwd, app.SearchFilters{Query: query, Kind: model.Kind(*kind), Status: *status, Actor: *actor, TargetVersion: *version, Commit: *commit, CommitStart: *commitStart, CommitEnd: *commitEnd, File: *file, Tags: tags, Source: *source, UpdatedAfter: after, UpdatedBefore: before, Limit: *limit, Offset: *offset})
 	case "related":
 		f := flag.NewFlagSet("related", flag.ContinueOnError)
 		f.SetOutput(logs)
@@ -401,6 +406,11 @@ func run(ctx context.Context, args []string, out, logs io.Writer) error {
 			return fmt.Errorf("%w: history requires one file path", model.ErrInvalidInput)
 		}
 		result, err = service.History(ctx, *cwd, f.Arg(0), *limit)
+	case "tags":
+		if len(rest) != 0 {
+			return fmt.Errorf("%w: tags takes no arguments", model.ErrInvalidInput)
+		}
+		result, err = service.Tags(ctx, *cwd)
 	case "review":
 		f := flag.NewFlagSet("review", flag.ContinueOnError)
 		f.SetOutput(logs)

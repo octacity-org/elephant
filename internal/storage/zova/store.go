@@ -513,6 +513,11 @@ func (t *transaction) Link(p model.Project, r model.Relation) error {
 			return fmt.Errorf("%w: %w", model.ErrStorage, err)
 		}
 	}
+	if name, ok := model.TagFromNode(r.To); ok {
+		if err := t.db.PutGraphNode(native.GraphNodeInput{GraphName: graph, NodeID: r.To, Kind: "tag", TargetType: native.GraphTargetConcept, TargetRef: &name}); err != nil {
+			return fmt.Errorf("%w: %w", model.ErrStorage, err)
+		}
+	}
 	if err := t.db.PutGraphEdge(native.GraphEdgeInput{GraphName: graph, FromNodeID: r.From, EdgeType: r.Type, ToNodeID: r.To}); err != nil {
 		return fmt.Errorf("%w: %w", model.ErrStorage, err)
 	}

@@ -80,7 +80,7 @@ func TestMCPToolsValidationAndContinuity(t *testing.T) {
 		"add_evidence", "list_evidence", "verify_evidence", "refresh_evidence", "remove_evidence",
 		"add_checkpoint", "list_checkpoints",
 		"export_project", "import_project",
-		"search_entries", "related_entries", "file_history",
+		"search_entries", "related_entries", "list_tags", "file_history",
 		"review_memory",
 	})
 	rr, re := session.CallTool(ctx, &sdk.CallToolParams{Name: "list_remotes", Arguments: map[string]any{}})
@@ -114,6 +114,26 @@ func TestMCPToolsValidationAndContinuity(t *testing.T) {
 	var packet app.RecallResult
 	if err = json.Unmarshal(data, &packet); err != nil || len(packet.RecentCompleted) != 1 {
 		t.Fatalf("%s %v", data, err)
+	}
+	r, err = session.CallTool(ctx, &sdk.CallToolParams{Name: "add_fact", Arguments: map[string]any{"title": "Tagged", "body": "fact", "tags": []string{"Build"}}})
+	if err != nil || r.IsError {
+		t.Fatal(r, err)
+	}
+	for _, call := range []struct {
+		name string
+		args map[string]any
+		want string
+	}{
+		{"list_tags", map[string]any{}, `{"entries":1,"tag":"build"}`},
+		{"search_entries", map[string]any{"tags": []string{"build"}}, `"tags":["build"]`},
+	} {
+		r, err = session.CallTool(ctx, &sdk.CallToolParams{Name: call.name, Arguments: call.args})
+		if err != nil || r.IsError {
+			t.Fatal(call.name, r, err)
+		}
+		if data, _ = json.Marshal(r.StructuredContent); !strings.Contains(string(data), call.want) {
+			t.Fatalf("%s: %s", call.name, data)
+		}
 	}
 }
 

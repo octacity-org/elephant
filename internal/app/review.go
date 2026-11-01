@@ -222,6 +222,9 @@ func (s *Service) Review(ctx context.Context, cwd string, opts *ReviewOptions) (
 					return err
 				}
 				for _, r := range links {
+					if r.Type == model.TagEdge {
+						continue
+					}
 					if strings.HasPrefix(r.To, "file:") {
 						if finished {
 							continue

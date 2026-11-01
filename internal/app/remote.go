@@ -267,6 +267,9 @@ func (s *Service) BuildMessage(ctx context.Context, cwd, operation string, k mod
 		return Message{}, err
 	}
 	m := Message{ProtocolVersion: 1, MessageID: uuid.NewV7().String(), SenderElephantID: self, Project: ProjectRef{g.Identity, g.Name}, Operation: operation}
+	if len(in.Tags) > 0 {
+		return Message{}, fmt.Errorf("%w: remote send does not carry tags", model.ErrInvalidInput)
+	}
 	if operation == "entry.send" {
 		now := time.Now().UTC()
 		m.Entry = &model.Entry{ID: uuid.NewV7().String(), ActorID: currentActor(), Kind: k, Title: in.Title, Body: in.Body, Status: model.DefaultStatus(k), TargetVersion: in.TargetVersion, StartCommit: optional(g.Head), CreatedAt: now, UpdatedAt: now}

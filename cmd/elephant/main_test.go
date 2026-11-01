@@ -493,3 +493,58 @@ func TestCLIUsageErrorsAreInvalidInput(t *testing.T) {
 		}
 	}
 }
+
+func TestTagsCLI(t *testing.T) {
+	ctx := context.Background()
+	cwd := t.TempDir()
+	if out, err := exec.Command("git", "init", "-q", cwd).CombinedOutput(); err != nil {
+		t.Fatal(string(out), err)
+	}
+	database := filepath.Join(t.TempDir(), "tagscli.zova")
+	var out, logs bytes.Buffer
+	runJSON := func(into any, args ...string) {
+		t.Helper()
+		out.Reset()
+		if err := run(ctx, append([]string{"--db", database, "--cwd", cwd}, args...), &out, &logs); err != nil {
+			t.Fatalf("%v: %v %s", args, err, logs.String())
+		}
+		if err := json.Unmarshal(out.Bytes(), into); err != nil {
+			t.Fatalf("%v: %v %s", args, err, out.String())
+		}
+	}
+	var added app.Record
+	runJSON(&added, "add", "fact", "--title", "External disk", "--body", "Builds go there", "--tag", "Build", "--tag", "disk")
+	if strings.Join(added.Tags, ",") != "build,disk" {
+		t.Fatalf("add tags = %q", added.Tags)
+	}
+	var plain app.Record
+	runJSON(&plain, "add", "fact", "--title", "Untagged", "--body", "fact")
+	var found []app.SearchResult
+	runJSON(&found, "search", "--tag", "build", "--tag", "disk")
+	if len(found) != 1 || found[0].Entry.ID != added.Entry.ID {
+		t.Fatalf("search: %+v", found)
+	}
+	var counts []app.TagCount
+	runJSON(&counts, "tags")
+	if len(counts) != 2 || counts[0].Tag != "build" || counts[0].Entries != 1 {
+		t.Fatalf("tags: %+v", counts)
+	}
+	var updated app.Record
+	runJSON(&updated, "update", "fact", added.Entry.ID, "--tag", "macos")
+	if strings.Join(updated.Tags, ",") != "macos" {
+		t.Fatalf("update tags = %q", updated.Tags)
+	}
+	runJSON(&updated, "update", "fact", added.Entry.ID, "--clear-tags")
+	if len(updated.Tags) != 0 {
+		t.Fatalf("clear tags = %q", updated.Tags)
+	}
+	for _, args := range [][]string{
+		{"update", "fact", added.Entry.ID, "--tag", "x", "--clear-tags"},
+		{"add", "fact", "--title", "Bad", "--body", "tag", "--tag", "two words"},
+		{"tags", "extra"},
+	} {
+		if err := run(ctx, append([]string{"--db", database, "--cwd", cwd}, args...), &out, &logs); !errors.Is(err, model.ErrInvalidInput) {
+			t.Fatalf("%v: %v", args, err)
+		}
+	}
+}

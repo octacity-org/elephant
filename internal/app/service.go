@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"slices"
 	"strings"
 	"time"
 	"uuid"
@@ -38,6 +39,7 @@ type CreateInput struct {
 	Relations     []RelationInput `json:"relations,omitempty"`
 	Evidence      []EvidenceInput `json:"evidence,omitempty"`
 	Supersedes    string          `json:"supersedes,omitempty"`
+	Tags          []string        `json:"tags,omitempty"`
 }
 type UpdateInput struct {
 	Title         *string         `json:"title,omitempty"`
@@ -46,13 +48,16 @@ type UpdateInput struct {
 	TargetVersion *string         `json:"target_version,omitempty"`
 	RelatedFiles  *[]string       `json:"related_files,omitempty"`
 	Relations     []RelationInput `json:"relations,omitempty"`
+	Tags          *[]string       `json:"tags,omitempty"`
 }
 
 // Record is one entry with its graph context: outgoing relations, incoming
 // relations from this project's entries and checkpoints, and stored evidence
-// rows (use evidence verify for their current state).
+// rows (use evidence verify for their current state). Tags lists the tagged
+// edges among Relations by name.
 type Record struct {
 	Entry     model.Entry      `json:"entry"`
+	Tags      []string         `json:"tags"`
 	Relations []model.Relation `json:"relations"`
 	Incoming  []model.Relation `json:"incoming"`
 	Evidence  []model.Evidence `json:"evidence"`
@@ -109,6 +114,7 @@ func record(tx storage.Tx, p model.Project, e model.Entry) (Record, error) {
 	if out.Relations, err = tx.Relations("entry:" + e.ID); err != nil {
 		return out, err
 	}
+	out.Tags = tagsOf(out.Relations)
 	incoming, err := tx.Incoming(model.EntryNode(p, e.ID))
 	if err != nil {
 		return out, err
@@ -167,10 +173,14 @@ func (s *Service) Add(ctx context.Context, cwd string, k model.Kind, in CreateIn
 		if err != nil {
 			return err
 		}
+		tags, err := model.NormalizeTags(in.Tags)
+		if err != nil {
+			return err
+		}
 		if err = tx.Put(p, e); err != nil {
 			return err
 		}
-		if err = attach(tx, p, e, files, in.Relations); err != nil {
+		if err = attach(tx, p, e, files, tags, in.Relations); err != nil {
 			return err
 		}
 		if in.Supersedes != "" {
@@ -256,7 +266,24 @@ func (s *Service) Update(ctx context.Context, cwd string, k model.Kind, id strin
 				return err
 			}
 		}
-		if err = attach(tx, p, e, files, in.Relations); err != nil {
+		var tags []string
+		if in.Tags != nil {
+			if tags, err = model.NormalizeTags(*in.Tags); err != nil {
+				return err
+			}
+			links, err := tx.Relations("entry:" + id)
+			if err != nil {
+				return err
+			}
+			for _, r := range links {
+				if r.Type == model.TagEdge {
+					if err = tx.Unlink(r); err != nil {
+						return err
+					}
+				}
+			}
+		}
+		if err = attach(tx, p, e, files, tags, in.Relations); err != nil {
 			return err
 		}
 		out, err = record(tx, p, e)
@@ -287,7 +314,7 @@ func repoFiles(g gitrepo.Metadata, files []string) ([]string, error) {
 	}
 	return out, nil
 }
-func attach(tx storage.Tx, p model.Project, e model.Entry, files []string, links []RelationInput) error {
+func attach(tx storage.Tx, p model.Project, e model.Entry, files, tags []string, links []RelationInput) error {
 	if len(files)+len(links) > 99 {
 		return fmt.Errorf("%w: at most 99 related files and entries per mutation", model.ErrInvalidInput)
 	}
@@ -297,6 +324,11 @@ func attach(tx storage.Tx, p model.Project, e model.Entry, files []string, links
 			return err
 		}
 		if err = tx.Link(p, model.Relation{From: "entry:" + e.ID, Type: model.FileEdge(e.Kind), To: "file:" + p.ID + ":" + clean}); err != nil {
+			return err
+		}
+	}
+	for _, tag := range tags {
+		if err := tx.Link(p, model.Relation{From: "entry:" + e.ID, Type: model.TagEdge, To: model.TagNode(tag)}); err != nil {
 			return err
 		}
 	}
@@ -326,6 +358,18 @@ func attach(tx storage.Tx, p model.Project, e model.Entry, files []string, links
 		return fmt.Errorf("%w: at most 100 outgoing relations per entry", model.ErrInvalidInput)
 	}
 	return nil
+}
+
+// tagsOf returns the tag names among an entry's outgoing relations.
+func tagsOf(links []model.Relation) []string {
+	tags := []string{}
+	for _, r := range links {
+		if name, ok := model.TagFromNode(r.To); ok && r.Type == model.TagEdge {
+			tags = append(tags, name)
+		}
+	}
+	slices.Sort(tags)
+	return tags
 }
 
 func currentActor() string {

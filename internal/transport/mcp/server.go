@@ -107,10 +107,10 @@ func New(service *app.Service, defaultCWD string) *sdk.Server {
 	register(s, "project_status", "Resolve project identity and report current Git metadata.", func(ctx context.Context, in scope) (app.Status, error) { return service.Status(ctx, cwd(in.CWD)) })
 	register(s, "inspect_entry", "Read an entry with its outgoing and incoming graph relationships and stored evidence within this project.", func(ctx context.Context, in idInput) (app.Record, error) { return service.Get(ctx, cwd(in.CWD), in.ID) })
 	for _, kind := range []model.Kind{model.Fact, model.Decision, model.Task} {
-		register(s, "add_"+string(kind), "Create a "+string(kind)+" with required title and contextual body; capture HEAD and atomically attach files and relations. Decisions can specify supersedes.", func(ctx context.Context, in addInput) (app.Record, error) {
+		register(s, "add_"+string(kind), "Create a "+string(kind)+" with required title and contextual body; capture HEAD and atomically attach files, relations, and tags (lowercase labels; see list_tags). Decisions can specify supersedes.", func(ctx context.Context, in addInput) (app.Record, error) {
 			return service.Add(ctx, cwd(in.CWD), kind, in.CreateInput)
 		})
-		register(s, "update_"+string(kind), "Update a "+string(kind)+". Omitted fields are preserved; related_files replaces all file links, [] clears them. Empty target_version clears it. Relations are added. Terminal entries cannot reopen.", func(ctx context.Context, in updateInput) (app.Record, error) {
+		register(s, "update_"+string(kind), "Update a "+string(kind)+". Omitted fields are preserved; related_files and tags each replace the full set, [] clears them. Empty target_version clears it. Relations are added. Terminal entries cannot reopen.", func(ctx context.Context, in updateInput) (app.Record, error) {
 			return service.Update(ctx, cwd(in.CWD), kind, in.ID, in.UpdateInput)
 		})
 		register(s, "list_"+string(kind)+"s", "List project "+string(kind)+" entries newest first. Limit defaults to 200 (maximum 200); use offset to page.", func(ctx context.Context, in listInput) ([]model.Entry, error) {
