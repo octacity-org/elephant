@@ -223,6 +223,8 @@ elephant search --global disk
 
 Recall shows the unfinished global entries tagged `pinned` in a `global` section, newest first and at most 20, with each entry's origin; `recall --brief` lists their titles first, also in a repository Elephant does not know or outside Git. Untagged global entries are found with search only. `inspect`, `update`, `retire`, `complete` and `cancel` take a global entry's ID from any repository. Superseding a global decision, with `supersede` or `supersedes`, writes the replacement to global memory too. Export, import, remote send and `list_tags` cover only the project, not global memory.
 
+A global fact can be true on one machine only, such as a path to a disk that only one machine has. Tag it `host:NAME` to limit it to that machine: recall then shows it only where the current host name is `NAME`, while entries without a `host:` tag show everywhere and an entry may name several hosts. The current host name is `ELEPHANT_HOST` when set, otherwise the operating system's host name, lowercased with characters a tag cannot hold replaced by `-`; recall reports it as `host`. Search does not filter by host, so another machine's entries can still be found and edited.
+
 ## Deterministic search
 
 ```sh

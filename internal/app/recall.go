@@ -25,6 +25,7 @@ type RecallResult struct {
 	Relations        []model.Relation  `json:"relations"`
 	ChangedFiles     []ChangedFile     `json:"changed_files"`
 	Staleness        []Staleness       `json:"staleness"`
+	Host             string            `json:"host,omitempty"`
 	Global           []GlobalEntry     `json:"global"`
 	Truncated        map[string]bool   `json:"truncated"`
 }
@@ -191,7 +192,8 @@ func (s *Service) recallWith(ctx context.Context, version string, global bool, w
 		}
 		if global {
 			var truncated bool
-			if out.Global, truncated, err = pinnedGlobal(tx); err != nil {
+			out.Host = currentHost()
+			if out.Global, truncated, err = pinnedGlobal(tx, out.Host); err != nil {
 				return err
 			}
 			if truncated {
@@ -208,15 +210,16 @@ func (s *Service) recallWith(ctx context.Context, version string, global bool, w
 func (s *Service) Pinned(ctx context.Context) (out []GlobalEntry, truncated bool, err error) {
 	err = s.store.Transact(ctx, func(tx storage.Tx) error {
 		var err error
-		out, truncated, err = pinnedGlobal(tx)
+		out, truncated, err = pinnedGlobal(tx, currentHost())
 		return err
 	})
 	return
 }
 
-// pinnedGlobal lists unfinished global entries tagged pinned, newest first.
-// Tags live in the graph, so it reads at most recallGlobalScan entries.
-func pinnedGlobal(tx storage.Tx) (out []GlobalEntry, truncated bool, err error) {
+// pinnedGlobal lists unfinished global entries tagged pinned that apply on
+// host, newest first. Tags live in the graph, so it reads at most
+// recallGlobalScan entries.
+func pinnedGlobal(tx storage.Tx, host string) (out []GlobalEntry, truncated bool, err error) {
 	out = []GlobalEntry{}
 	p, found, err := globalProject(tx, false)
 	if err != nil || !found {
@@ -236,7 +239,7 @@ func pinnedGlobal(tx storage.Tx) (out []GlobalEntry, truncated bool, err error) 
 			if err != nil {
 				return nil, false, err
 			}
-			if !slices.Contains(tagsOf(links), model.PinnedTag) {
+			if tags := tagsOf(links); !slices.Contains(tags, model.PinnedTag) || !model.OnHost(tags, host) {
 				continue
 			}
 			if len(out) == RecallGlobalLimit {

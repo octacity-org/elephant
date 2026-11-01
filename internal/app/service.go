@@ -485,6 +485,16 @@ func tagsOf(links []model.Relation) []string {
 	return tags
 }
 
+// currentHost names this machine for host tags: ELEPHANT_HOST when set,
+// otherwise the operating system's host name.
+func currentHost() string {
+	host := os.Getenv("ELEPHANT_HOST")
+	if host == "" {
+		host, _ = os.Hostname()
+	}
+	return model.HostName(host)
+}
+
 func currentActor() string {
 	if a := os.Getenv("ELEPHANT_ACTOR_ID"); a != "" {
 		return a

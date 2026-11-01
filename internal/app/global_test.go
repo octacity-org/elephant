@@ -179,3 +179,66 @@ func TestGlobalRecallIsBounded(t *testing.T) {
 		t.Fatalf("pinned: %d %v %v", len(pins), truncated, err)
 	}
 }
+
+func TestGlobalRecallFiltersByHost(t *testing.T) {
+	ctx := context.Background()
+	cwd := repo(t)
+	db, err := zova.Open(filepath.Join(t.TempDir(), "globalhost.zova"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	s := app.New(db)
+	for _, in := range []struct {
+		title string
+		tags  []string
+	}{
+		{"Everywhere", nil},
+		{"Only a", []string{"host:a"}},
+		{"Only b", []string{"host:b"}},
+		{"a or c", []string{"host:a", "host:c"}},
+	} {
+		if _, err := s.Add(ctx, cwd, model.Fact, app.CreateInput{Title: in.title, Body: "global", Tags: append(in.tags, model.PinnedTag), Global: true}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	titles := func(entries []app.GlobalEntry) []string {
+		out := []string{}
+		for _, e := range entries {
+			out = append(out, e.Entry.Title)
+		}
+		slices.Sort(out)
+		return out
+	}
+	for _, c := range []struct {
+		env, host string
+		want      []string
+	}{
+		{"a", "a", []string{"Everywhere", "Only a", "a or c"}},
+		{" B ", "b", []string{"Everywhere", "Only b"}},
+		{"Mac Studio.local", "mac-studio.local", []string{"Everywhere"}},
+	} {
+		t.Setenv("ELEPHANT_HOST", c.env)
+		r, err := s.Recall(ctx, cwd, "")
+		if err != nil || r.Host != c.host || !slices.Equal(titles(r.Global), c.want) {
+			t.Fatalf("host %q: %q %q %v", c.env, r.Host, titles(r.Global), err)
+		}
+		pins, _, err := s.Pinned(ctx)
+		if err != nil || !slices.Equal(titles(pins), c.want) {
+			t.Fatalf("pinned for host %q: %q %v", c.env, titles(pins), err)
+		}
+	}
+	// Search is not filtered by host, so other machines' entries stay editable.
+	if found, err := s.Search(ctx, cwd, app.SearchFilters{Global: true}); err != nil || len(found) != 4 {
+		t.Fatalf("global search: %d %v", len(found), err)
+	}
+	// Without ELEPHANT_HOST the operating system's host name applies.
+	t.Setenv("ELEPHANT_HOST", "")
+	r, err := s.Recall(ctx, cwd, "")
+	if err != nil || r.Host == "" {
+		t.Fatalf("os host: %q %v", r.Host, err)
+	}
+	if _, err := model.NormalizeTags([]string{"host:" + r.Host}); err != nil {
+		t.Fatalf("os host %q is not a valid tag: %v", r.Host, err)
+	}
+}
