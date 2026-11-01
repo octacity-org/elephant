@@ -32,6 +32,7 @@ func parseCreate(name string, args []string, logs io.Writer) (app.CreateInput, e
 	body := f.String("body", "", "context and reasoning")
 	target := f.String("target-version", "", "release or milestone")
 	supersedes := f.String("supersedes", "", "active decision ID this decision replaces")
+	global := f.Bool("global", false, "store in global memory shared by every project")
 	var files, relations, tags fileFlags
 	f.Var(&files, "file", "related file, relative to the working directory; repeatable")
 	f.Var(&relations, "relation", "TYPE:ENTRY_UUID; repeatable")
@@ -46,7 +47,7 @@ func parseCreate(name string, args []string, logs io.Writer) (app.CreateInput, e
 	if err != nil {
 		return app.CreateInput{}, err
 	}
-	in := app.CreateInput{Title: *title, Body: *body, RelatedFiles: files, Relations: links, Supersedes: *supersedes, Tags: tags}
+	in := app.CreateInput{Title: *title, Body: *body, RelatedFiles: files, Relations: links, Supersedes: *supersedes, Tags: tags, Global: *global}
 	if *target != "" {
 		in.TargetVersion = target
 	}
