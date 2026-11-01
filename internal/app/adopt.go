@@ -293,6 +293,14 @@ func (s *Service) Adopt(ctx context.Context, cwd, entryID, selector string) (out
 		}
 		var skipped []string
 		for _, r := range remoteLinks {
+			if _, ok := model.TagFromNode(r.To); ok && r.Type == model.TagEdge {
+				// Tags were validated on receive or import and need no
+				// local target.
+				if err = tx.Link(local, model.Relation{From: model.EntryNode(local, e.ID), Type: model.TagEdge, To: r.To}); err != nil {
+					return err
+				}
+				continue
+			}
 			if strings.HasPrefix(r.To, "file:"+src.ID+":") {
 				file := strings.TrimPrefix(r.To, "file:"+src.ID+":")
 				clean, err := resolveLocalFile(g.Root, file)

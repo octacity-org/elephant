@@ -86,17 +86,18 @@ func runRemote(ctx context.Context, s *app.Service, cwd string, args []string, l
 		body := f.String("body", "", "context")
 		version := f.String("target-version", "", "release or milestone")
 		supersedes := f.String("supersedes", "", "remote decision ID")
-		var files, relations, evidence fileFlags
+		var files, relations, evidence, tags fileFlags
 		f.Var(&files, "file", "file, relative to the working directory; repeatable")
 		f.Var(&relations, "relation", "TYPE:ENTRY_UUID; repeatable")
 		f.Var(&evidence, "evidence", "local evidence row ID to carry; repeatable")
+		f.Var(&tags, "tag", "tag; repeatable")
 		if err := parseFlags(f, args); err != nil {
 			return nil, err
 		}
 		if f.NArg() != 0 {
 			return nil, model.ErrInvalidInput
 		}
-		in := app.CreateInput{Title: *title, Body: *body, RelatedFiles: files, Supersedes: *supersedes}
+		in := app.CreateInput{Title: *title, Body: *body, RelatedFiles: files, Supersedes: *supersedes, Tags: tags}
 		if *version != "" {
 			in.TargetVersion = version
 		}

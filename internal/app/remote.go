@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 	"uuid"
@@ -28,6 +29,9 @@ type Message struct {
 	Files            []string         `json:"files,omitempty"`
 	Relations        []RelationInput  `json:"relations,omitempty"`
 	Evidence         []model.Evidence `json:"evidence,omitempty"`
+	// Tags is omitted when empty, so peers that predate tags still accept
+	// untagged entries and reject tagged ones as an unknown field.
+	Tags []string `json:"tags,omitempty"`
 }
 type Response struct {
 	EntryID         string        `json:"entry_id,omitempty"`
@@ -62,7 +66,7 @@ func validateMessage(m Message) error {
 		return fmt.Errorf("%w: unknown operation", model.ErrInvalidInput)
 	}
 	if m.Operation != "entry.send" {
-		if m.Entry != nil || len(m.Files)+len(m.Relations)+len(m.Evidence) > 0 {
+		if m.Entry != nil || len(m.Files)+len(m.Relations)+len(m.Evidence)+len(m.Tags) > 0 {
 			return model.ErrInvalidInput
 		}
 		return nil
@@ -78,8 +82,14 @@ func validateMessage(m Message) error {
 			return model.ErrInvalidInput
 		}
 	}
-	if len(m.Files)+len(m.Relations) > 99 {
+	if len(m.Files)+len(m.Relations) > 99 || len(m.Files)+len(m.Relations)+len(m.Tags) > 100 {
 		return model.ErrInvalidInput
+	}
+	// Tags must arrive normalized, so equal tag sets have one encoding.
+	if tags, err := model.NormalizeTags(m.Tags); err != nil {
+		return err
+	} else if !slices.Equal(tags, m.Tags) {
+		return fmt.Errorf("%w: tags must be lowercase, sorted, and unique", model.ErrInvalidInput)
 	}
 	for _, f := range m.Files {
 		if strings.Contains("/"+f+"/", "/../") {
@@ -155,12 +165,15 @@ func (s *Service) Receive(ctx context.Context, m Message) (out Response, err err
 		if m.Operation == "project.ensure" {
 			return nil
 		}
+		// Tags is omitted when empty, so untagged entries keep the digest
+		// they had before tags were sent.
 		entryDigest := digest(struct {
 			Entry     *model.Entry
 			Files     []string
 			Relations []RelationInput
 			Evidence  []model.Evidence
-		}{m.Entry, m.Files, m.Relations, m.Evidence})
+			Tags      []string `json:",omitempty"`
+		}{m.Entry, m.Files, m.Relations, m.Evidence, m.Tags})
 		seen, err := tx.Message(m.Entry.ID, entryDigest, "entry:"+out.Table.TableName)
 		if err != nil || seen {
 			return err
@@ -185,6 +198,11 @@ func (s *Service) Receive(ctx context.Context, m Message) (out Response, err err
 				return err
 			}
 			if err = tx.Link(p, model.Relation{From: model.EntryNode(p, e.ID), Type: r.Type, To: model.EntryNode(p, r.EntryID)}); err != nil {
+				return err
+			}
+		}
+		for _, tag := range m.Tags {
+			if err = tx.Link(p, model.Relation{From: model.EntryNode(p, e.ID), Type: model.TagEdge, To: model.TagNode(tag)}); err != nil {
 				return err
 			}
 		}
@@ -267,9 +285,6 @@ func (s *Service) BuildMessage(ctx context.Context, cwd, operation string, k mod
 		return Message{}, err
 	}
 	m := Message{ProtocolVersion: 1, MessageID: uuid.NewV7().String(), SenderElephantID: self, Project: ProjectRef{g.Identity, g.Name}, Operation: operation}
-	if len(in.Tags) > 0 {
-		return Message{}, fmt.Errorf("%w: remote send does not carry tags", model.ErrInvalidInput)
-	}
 	if in.Global {
 		return Message{}, fmt.Errorf("%w: remote send does not carry global entries", model.ErrInvalidInput)
 	}
@@ -280,6 +295,9 @@ func (s *Service) BuildMessage(ctx context.Context, cwd, operation string, k mod
 			return Message{}, err
 		}
 		m.Relations = in.Relations
+		if m.Tags, err = model.NormalizeTags(in.Tags); err != nil {
+			return Message{}, err
+		}
 		if in.Supersedes != "" {
 			m.Relations = append(m.Relations, RelationInput{Type: "supersedes", EntryID: in.Supersedes})
 		}
