@@ -101,16 +101,16 @@ func New(service *app.Service, defaultCWD string) *sdk.Server {
 	registerPortable(s, service, cwd)
 	registerSearch(s, service, cwd)
 	registerReview(s, service, cwd)
-	register(s, "recall_project", "Get bounded active project knowledge, unfinished work, recent history, file relations, memory linked to uncommitted changed files, and current Git state.", func(ctx context.Context, in recallInput) (app.RecallResult, error) {
+	register(s, "recall_project", "Get bounded active project knowledge, unfinished work, recent history, file relations, memory linked to uncommitted changed files, current Git state, and pinned global memory.", func(ctx context.Context, in recallInput) (app.RecallResult, error) {
 		return service.Recall(ctx, cwd(in.CWD), in.TargetVersion)
 	})
 	register(s, "project_status", "Resolve project identity and report current Git metadata.", func(ctx context.Context, in scope) (app.Status, error) { return service.Status(ctx, cwd(in.CWD)) })
-	register(s, "inspect_entry", "Read an entry with its outgoing and incoming graph relationships and stored evidence within this project.", func(ctx context.Context, in idInput) (app.Record, error) { return service.Get(ctx, cwd(in.CWD), in.ID) })
+	register(s, "inspect_entry", "Read an entry with its outgoing and incoming graph relationships and stored evidence within this project or global memory.", func(ctx context.Context, in idInput) (app.Record, error) { return service.Get(ctx, cwd(in.CWD), in.ID) })
 	for _, kind := range []model.Kind{model.Fact, model.Decision, model.Task} {
-		register(s, "add_"+string(kind), "Create a "+string(kind)+" with required title and contextual body; capture HEAD and atomically attach files, relations, and tags (lowercase labels; see list_tags). Decisions can specify supersedes.", func(ctx context.Context, in addInput) (app.Record, error) {
+		register(s, "add_"+string(kind), "Create a "+string(kind)+" with required title and contextual body; capture HEAD and atomically attach files, relations, and tags (lowercase labels; see list_tags). Decisions can specify supersedes. global: true stores it in global memory shared by every project, for knowledge that is not about one repository (such as a user's machine or working preferences): no files, relations, or commits, and the source project is recorded. Tag a global entry pinned to show it in every recall.", func(ctx context.Context, in addInput) (app.Record, error) {
 			return service.Add(ctx, cwd(in.CWD), kind, in.CreateInput)
 		})
-		register(s, "update_"+string(kind), "Update a "+string(kind)+". Omitted fields are preserved; related_files and tags each replace the full set, [] clears them. Empty target_version clears it. Relations are added. Terminal entries cannot reopen.", func(ctx context.Context, in updateInput) (app.Record, error) {
+		register(s, "update_"+string(kind), "Update a "+string(kind)+" in this project or global memory. Omitted fields are preserved; related_files and tags each replace the full set, [] clears them. Empty target_version clears it. Relations are added. Terminal entries cannot reopen.", func(ctx context.Context, in updateInput) (app.Record, error) {
 			return service.Update(ctx, cwd(in.CWD), kind, in.ID, in.UpdateInput)
 		})
 		register(s, "list_"+string(kind)+"s", "List project "+string(kind)+" entries newest first. Limit defaults to 200 (maximum 200); use offset to page.", func(ctx context.Context, in listInput) ([]model.Entry, error) {

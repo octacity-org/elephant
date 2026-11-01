@@ -108,7 +108,7 @@ elephant setup claude-code --hooks
 elephant setup codex --hooks
 ```
 
-The hook is opt-in: plain `setup` never installs one. It is safe to install globally, because `recall --brief` prints nothing in a repository Elephant does not know or that has no unfinished memory, and it never creates a database or a project. It runs for new, cleared and compacted sessions (matcher `startup|clear|compact`); resumed sessions are skipped because they already carry the earlier context. The timeout is 10 seconds, and a failing hook does not stop the session in either agent.
+The hook is opt-in: plain `setup` never installs one. It is safe to install globally, because `recall --brief` prints nothing in a repository Elephant does not know or that has no unfinished memory, apart from pinned [global memory](#global-memory), and it never creates a database or a project. It runs for new, cleared and compacted sessions (matcher `startup|clear|compact`); resumed sessions are skipped because they already carry the earlier context. The timeout is 10 seconds, and a failing hook does not stop the session in either agent.
 
 - Claude Code: the hook goes into `~/.claude/settings.json`, or `$CLAUDE_CONFIG_DIR/settings.json` when that is set, as an extra `hooks.SessionStart` group after any existing ones.
 - Codex: the hook goes into the same `config.toml` as the MCP entry, as a `[[hooks.SessionStart]]` table appended after any existing groups, so groups you already trusted keep their position. Codex 0.124.0 or later reads these hooks, and since 0.129.0 a new or changed hook runs only after you review and trust it in `/hooks`; setup does not trust it for you.
@@ -209,6 +209,19 @@ elephant tags
 A tag is 1–64 characters of `a-z`, `0-9`, `-`, `_`, `.`, `:` and `/`, starting with a letter or digit. Tags are lowercased, duplicates are dropped, and an entry has at most 16. `:` allows namespaced tags such as `host:mac-studio`. The add and update MCP tools take `tags`; on update the list replaces all tags and `[]` clears them. `inspect_entry` and search results list each entry's tags. `search_entries` takes `tags` and returns entries that have every listed tag. `list_tags` (CLI `elephant tags`) lists the project's tags with how many entries carry each, most used first; it reads every entry, so it is slower on large projects. Check it before inventing a new tag so similar entries share one.
 
 Tags are stored as graph edges, like file links: they appear in `relations` with type `tagged` and target `tag:NAME`. Export includes them and import validates them. `remote send` does not carry tags yet and rejects them instead of dropping them.
+
+### Global memory
+
+Some knowledge is about you or your machine rather than one repository, such as "builds go on the external disk". Global memory holds it once for every project instead of copying it into each:
+
+```sh
+elephant add fact --global --tag pinned --title "Builds use the external disk" --body "The internal disk is nearly full; put build output under /Volumes/External"
+elephant search --global disk
+```
+
+`--global` (MCP `global: true` on the add tools and `search_entries`) stores or searches global memory. Global entries live in one shared project, so every repository on this Elephant sees the same entries. They take tags but no related files, links to project entries or evidence, and they record no commits, because those belong to one repository. Each global entry records the project it was written from as an `origin` relation to `project:IDENTITY`; written outside a Git repository, where only global writes work, it has no origin.
+
+Recall shows the unfinished global entries tagged `pinned` in a `global` section, newest first and at most 20, with each entry's origin; `recall --brief` lists their titles first, also in a repository Elephant does not know or outside Git. Untagged global entries are found with search only. `inspect`, `update`, `retire`, `complete` and `cancel` take a global entry's ID from any repository. Export, import, remote send and `list_tags` cover only the project, not global memory.
 
 ## Deterministic search
 

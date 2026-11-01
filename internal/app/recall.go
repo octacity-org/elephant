@@ -25,7 +25,15 @@ type RecallResult struct {
 	Relations        []model.Relation  `json:"relations"`
 	ChangedFiles     []ChangedFile     `json:"changed_files"`
 	Staleness        []Staleness       `json:"staleness"`
+	Global           []GlobalEntry     `json:"global"`
 	Truncated        map[string]bool   `json:"truncated"`
+}
+
+// GlobalEntry is a pinned global entry with the identity of the project it
+// was written from, empty when it was written outside Git.
+type GlobalEntry struct {
+	Entry  model.Entry `json:"entry"`
+	Origin string      `json:"origin,omitempty"`
 }
 
 // Staleness compares the latest checkpoint or an unfinished entry with the
@@ -52,6 +60,13 @@ type ChangedFile struct {
 	Entries []model.Entry `json:"entries"`
 }
 
+// RecallGlobalLimit bounds the pinned global entries in one recall, and
+// recallGlobalScan bounds the global entries read to find them.
+const (
+	RecallGlobalLimit = 20
+	recallGlobalScan  = 1000
+)
+
 // recallEvidenceLimit bounds verification work in one recall.
 const recallEvidenceLimit = 50
 
@@ -70,14 +85,14 @@ const (
 )
 
 func (s *Service) Recall(ctx context.Context, cwd, version string) (out RecallResult, err error) {
-	return s.recallWith(ctx, version, func(fn func(storage.Tx, model.Project, gitrepo.Metadata) error) error { return s.within(ctx, cwd, fn) })
+	return s.recallWith(ctx, version, true, func(fn func(storage.Tx, model.Project, gitrepo.Metadata) error) error { return s.within(ctx, cwd, fn) })
 }
 
 // RecallExisting recalls the repository's project only when it is already
 // known, reporting found=false otherwise. Unlike Recall it never creates a
 // project record, so it can run in any repository, as session hooks do.
 func (s *Service) RecallExisting(ctx context.Context, cwd string) (out RecallResult, found bool, err error) {
-	out, err = s.recallWith(ctx, "", func(fn func(storage.Tx, model.Project, gitrepo.Metadata) error) error {
+	out, err = s.recallWith(ctx, "", true, func(fn func(storage.Tx, model.Project, gitrepo.Metadata) error) error {
 		g, err := gitrepo.Inspect(ctx, cwd)
 		if err != nil {
 			return err
@@ -96,8 +111,11 @@ func (s *Service) RecallExisting(ctx context.Context, cwd string) (out RecallRes
 	})
 	return
 }
-func (s *Service) recallWith(ctx context.Context, version string, within func(func(storage.Tx, model.Project, gitrepo.Metadata) error) error) (out RecallResult, err error) {
-	out = RecallResult{Tasks: []model.Entry{}, Decisions: []model.Entry{}, Facts: []model.Entry{}, Evidence: []EvidenceView{}, RecentCompleted: []model.Entry{}, RecentSuperseded: []model.Entry{}, Relations: []model.Relation{}, ChangedFiles: []ChangedFile{}, Staleness: []Staleness{}, Truncated: map[string]bool{}}
+
+// recallWith fills the pinned global entries only when global is set: a
+// remote source's recall carries none of this Elephant's global memory.
+func (s *Service) recallWith(ctx context.Context, version string, global bool, within func(func(storage.Tx, model.Project, gitrepo.Metadata) error) error) (out RecallResult, err error) {
+	out = RecallResult{Tasks: []model.Entry{}, Decisions: []model.Entry{}, Facts: []model.Entry{}, Evidence: []EvidenceView{}, RecentCompleted: []model.Entry{}, RecentSuperseded: []model.Entry{}, Relations: []model.Relation{}, ChangedFiles: []ChangedFile{}, Staleness: []Staleness{}, Global: []GlobalEntry{}, Truncated: map[string]bool{}}
 	err = within(func(tx storage.Tx, p model.Project, g gitrepo.Metadata) error {
 		out.Project = p
 		out.Git = g
@@ -171,9 +189,74 @@ func (s *Service) recallWith(ctx context.Context, version string, within func(fu
 				return err
 			}
 		}
+		if global {
+			var truncated bool
+			if out.Global, truncated, err = pinnedGlobal(tx); err != nil {
+				return err
+			}
+			if truncated {
+				out.Truncated["global"] = true
+			}
+		}
 		return nil
 	})
 	return
+}
+
+// Pinned reads the pinned global entries without creating anything, for
+// callers outside Git or in a project Elephant does not know.
+func (s *Service) Pinned(ctx context.Context) (out []GlobalEntry, truncated bool, err error) {
+	err = s.store.Transact(ctx, func(tx storage.Tx) error {
+		var err error
+		out, truncated, err = pinnedGlobal(tx)
+		return err
+	})
+	return
+}
+
+// pinnedGlobal lists unfinished global entries tagged pinned, newest first.
+// Tags live in the graph, so it reads at most recallGlobalScan entries.
+func pinnedGlobal(tx storage.Tx) (out []GlobalEntry, truncated bool, err error) {
+	out = []GlobalEntry{}
+	p, found, err := globalProject(tx, false)
+	if err != nil || !found {
+		return out, false, err
+	}
+	const page = 200
+	for offset := 0; ; offset += page {
+		entries, err := tx.List(p, model.Filter{Limit: page, Offset: offset})
+		if err != nil {
+			return nil, false, err
+		}
+		for _, e := range entries {
+			if model.Terminal(e.Kind, e.Status) {
+				continue
+			}
+			links, err := tx.Relations(model.EntryNode(p, e.ID))
+			if err != nil {
+				return nil, false, err
+			}
+			if !slices.Contains(tagsOf(links), model.PinnedTag) {
+				continue
+			}
+			if len(out) == RecallGlobalLimit {
+				return out, true, nil
+			}
+			entry := GlobalEntry{Entry: e}
+			for _, r := range links {
+				if identity, ok := model.ProjectFromNode(r.To); ok && r.Type == model.OriginEdge {
+					entry.Origin = identity
+				}
+			}
+			out = append(out, entry)
+		}
+		if len(entries) < page {
+			return out, false, nil
+		}
+		if offset+page >= recallGlobalScan {
+			return out, true, nil
+		}
+	}
 }
 
 // recallStaleness compares the latest checkpoint and the unfinished entries,

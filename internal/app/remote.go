@@ -204,7 +204,7 @@ func (s *Service) Receive(ctx context.Context, m Message) (out Response, err err
 	return
 }
 func (s *Service) RecallSource(ctx context.Context, ref ProjectRef, source, version string) (RecallResult, error) {
-	return s.recallWith(ctx, version, func(fn func(storage.Tx, model.Project, gitrepo.Metadata) error) error {
+	return s.recallWith(ctx, version, false, func(fn func(storage.Tx, model.Project, gitrepo.Metadata) error) error {
 		return s.store.Transact(ctx, func(tx storage.Tx) error {
 			p, err := tx.Source(ref.Identity, source)
 			if err != nil {
@@ -269,6 +269,9 @@ func (s *Service) BuildMessage(ctx context.Context, cwd, operation string, k mod
 	m := Message{ProtocolVersion: 1, MessageID: uuid.NewV7().String(), SenderElephantID: self, Project: ProjectRef{g.Identity, g.Name}, Operation: operation}
 	if len(in.Tags) > 0 {
 		return Message{}, fmt.Errorf("%w: remote send does not carry tags", model.ErrInvalidInput)
+	}
+	if in.Global {
+		return Message{}, fmt.Errorf("%w: remote send does not carry global entries", model.ErrInvalidInput)
 	}
 	if operation == "entry.send" {
 		now := time.Now().UTC()

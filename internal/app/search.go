@@ -39,6 +39,7 @@ type SearchFilters struct {
 	File          string
 	Tags          []string
 	Source        string
+	Global        bool
 	UpdatedAfter  *time.Time
 	UpdatedBefore *time.Time
 	Limit         int
@@ -241,7 +242,15 @@ func (s *Service) Search(ctx context.Context, cwd string, f SearchFilters) (out 
 	if err != nil {
 		return nil, err
 	}
+	// Global memory has no files, commits, or remote copies, and needs no
+	// repository.
+	if f.Global && (f.File != "" || f.Commit != "" || f.CommitStart != "" || f.CommitEnd != "" || f.Source != "") {
+		return nil, fmt.Errorf("%w: global search takes no file, commit, or remote filter", model.ErrInvalidInput)
+	}
 	g, err := gitrepo.Inspect(ctx, cwd)
+	if f.Global && errors.Is(err, gitrepo.ErrNotGitRepository) {
+		g, err = gitrepo.Metadata{}, nil
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -258,11 +267,16 @@ func (s *Service) Search(ctx context.Context, cwd string, f SearchFilters) (out 
 		return nil, err
 	}
 	err = s.store.Transact(ctx, func(tx storage.Tx) error {
-		local, err := resolve(tx, g)
-		if err != nil {
+		var project model.Project
+		var err error
+		if f.Global {
+			var found bool
+			if project, found, err = globalProject(tx, false); err != nil || !found {
+				return err
+			}
+		} else if project, err = resolve(tx, g); err != nil {
 			return err
 		}
-		project := local
 		if f.Source != "" {
 			remotes, err := tx.Remotes()
 			if err != nil {

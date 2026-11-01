@@ -2,6 +2,7 @@
 package app
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -40,6 +41,7 @@ type CreateInput struct {
 	Evidence      []EvidenceInput `json:"evidence,omitempty"`
 	Supersedes    string          `json:"supersedes,omitempty"`
 	Tags          []string        `json:"tags,omitempty"`
+	Global        bool            `json:"global,omitempty"`
 }
 type UpdateInput struct {
 	Title         *string         `json:"title,omitempty"`
@@ -104,6 +106,65 @@ func (s *Service) within(ctx context.Context, cwd string, fn func(storage.Tx, mo
 		return fn(tx, p, g)
 	})
 }
+
+// globalProject returns the global project. With create it is created on
+// first use; otherwise found reports whether it exists yet.
+func globalProject(tx storage.Tx, create bool) (p model.Project, found bool, err error) {
+	if create {
+		p, err = resolve(tx, gitrepo.Metadata{Identity: model.GlobalIdentity, Name: "global"})
+		return p, err == nil, err
+	}
+	p, err = tx.Project(model.GlobalIdentity)
+	if errors.Is(err, model.ErrProjectNotFound) {
+		return p, false, nil
+	}
+	return p, err == nil, err
+}
+
+// withinGlobal runs fn against the global project. cwd may be outside Git;
+// g then is empty, otherwise it describes the caller's repository.
+func (s *Service) withinGlobal(ctx context.Context, cwd string, fn func(storage.Tx, model.Project, gitrepo.Metadata) error) error {
+	g, err := gitrepo.Inspect(ctx, cwd)
+	if errors.Is(err, gitrepo.ErrNotGitRepository) {
+		g, err = gitrepo.Metadata{}, nil
+	}
+	if err != nil {
+		return err
+	}
+	return s.store.Transact(ctx, func(tx storage.Tx) error {
+		p, _, err := globalProject(tx, true)
+		if err != nil {
+			return err
+		}
+		return fn(tx, p, g)
+	})
+}
+
+// locate reads an entry from p, falling back to the global project: entry
+// IDs are unique, so a global entry is reachable by ID from any project.
+func locate(tx storage.Tx, p model.Project, id string) (model.Project, model.Entry, error) {
+	e, err := tx.Get(p, id)
+	if !errors.Is(err, model.ErrEntryNotFound) || p.Identity == model.GlobalIdentity {
+		return p, e, err
+	}
+	global, found, gerr := globalProject(tx, false)
+	if gerr != nil || !found {
+		return p, e, cmp.Or(gerr, err)
+	}
+	if ge, gerr := tx.Get(global, id); !errors.Is(gerr, model.ErrEntryNotFound) {
+		return global, ge, gerr
+	}
+	return p, e, err
+}
+
+// projectOnly rejects the parts of a write that only a project entry can
+// carry: repository files and links to project entries.
+func projectOnly(p model.Project, files, relations int) error {
+	if p.Identity == model.GlobalIdentity && files+relations > 0 {
+		return fmt.Errorf("%w: global entries cannot link files or project entries", model.ErrInvalidInput)
+	}
+	return nil
+}
 func (s *Service) Status(ctx context.Context, cwd string) (out Status, err error) {
 	err = s.within(ctx, cwd, func(tx storage.Tx, p model.Project, g gitrepo.Metadata) error { out = Status{p, g}; return nil })
 	return
@@ -134,7 +195,7 @@ func record(tx storage.Tx, p model.Project, e model.Entry) (Record, error) {
 }
 func (s *Service) Get(ctx context.Context, cwd, id string) (out Record, err error) {
 	err = s.within(ctx, cwd, func(tx storage.Tx, p model.Project, g gitrepo.Metadata) error {
-		e, err := tx.Get(p, id)
+		p, e, err := locate(tx, p, id)
 		if err != nil {
 			return err
 		}
@@ -161,12 +222,24 @@ func (s *Service) List(ctx context.Context, cwd string, f model.Filter) (out []m
 	return
 }
 func (s *Service) Add(ctx context.Context, cwd string, k model.Kind, in CreateInput) (out Record, err error) {
-	err = s.within(ctx, cwd, func(tx storage.Tx, p model.Project, g gitrepo.Metadata) error {
+	run := s.within
+	if in.Global {
+		run = s.withinGlobal
+	}
+	err = run(ctx, cwd, func(tx storage.Tx, p model.Project, g gitrepo.Metadata) error {
 		id := uuid.NewV7()
 		var err error
 		now := time.Now().UTC()
-		e := model.Entry{ID: id.String(), ActorID: currentActor(), Kind: k, Title: in.Title, Body: in.Body, Status: model.DefaultStatus(k), TargetVersion: in.TargetVersion, StartCommit: optional(g.Head), CreatedAt: now, UpdatedAt: now}
+		// Commits belong to one repository's history; global entries record none.
+		head := g.Head
+		if in.Global {
+			head = ""
+		}
+		e := model.Entry{ID: id.String(), ActorID: currentActor(), Kind: k, Title: in.Title, Body: in.Body, Status: model.DefaultStatus(k), TargetVersion: in.TargetVersion, StartCommit: optional(head), CreatedAt: now, UpdatedAt: now}
 		if err = e.Validate(); err != nil {
+			return err
+		}
+		if err = projectOnly(p, len(in.RelatedFiles), len(in.Relations)); err != nil {
 			return err
 		}
 		files, err := repoFiles(g, in.RelatedFiles)
@@ -183,6 +256,11 @@ func (s *Service) Add(ctx context.Context, cwd string, k model.Kind, in CreateIn
 		if err = attach(tx, p, e, files, tags, in.Relations); err != nil {
 			return err
 		}
+		if in.Global && g.Identity != "" {
+			if err = tx.Link(p, model.Relation{From: "entry:" + e.ID, Type: model.OriginEdge, To: model.ProjectNode(g.Identity)}); err != nil {
+				return err
+			}
+		}
 		if in.Supersedes != "" {
 			if k != model.Decision {
 				return model.ErrInvalidKind
@@ -198,7 +276,7 @@ func (s *Service) Add(ctx context.Context, cwd string, k model.Kind, in CreateIn
 				return model.ErrInvalidTransition
 			}
 			old.Status = "superseded"
-			old.EndCommit = optional(g.Head)
+			old.EndCommit = optional(head)
 			old.UpdatedAt = now
 			if err = tx.Put(p, old); err != nil {
 				return err
@@ -214,12 +292,23 @@ func (s *Service) Add(ctx context.Context, cwd string, k model.Kind, in CreateIn
 }
 func (s *Service) Update(ctx context.Context, cwd string, k model.Kind, id string, in UpdateInput) (out Record, err error) {
 	err = s.within(ctx, cwd, func(tx storage.Tx, p model.Project, g gitrepo.Metadata) error {
-		e, err := tx.Get(p, id)
+		p, e, err := locate(tx, p, id)
 		if err != nil {
 			return err
 		}
 		if e.Kind != k {
 			return model.ErrInvalidKind
+		}
+		head := g.Head
+		if p.Identity == model.GlobalIdentity {
+			head = ""
+		}
+		fileCount := 0
+		if in.RelatedFiles != nil {
+			fileCount = len(*in.RelatedFiles)
+		}
+		if err = projectOnly(p, fileCount, len(in.Relations)); err != nil {
+			return err
 		}
 		if in.Title != nil {
 			e.Title = *in.Title
@@ -238,7 +327,7 @@ func (s *Service) Update(ctx context.Context, cwd string, k model.Kind, id strin
 				return err
 			}
 			if e.Status != *in.Status && model.Terminal(k, *in.Status) {
-				e.EndCommit = optional(g.Head)
+				e.EndCommit = optional(head)
 			}
 			e.Status = *in.Status
 		}

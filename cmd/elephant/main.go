@@ -61,7 +61,7 @@ Usage: elephant [--cwd DIR] [--db FILE.zova] COMMAND
   search [QUERY] [--kind KIND] [--status STATUS] [--actor ACTOR]
          [--target-version V] [--commit C] [--commit-start C] [--commit-end C]
          [--updated-after RFC3339] [--updated-before RFC3339] [--file PATH] [--tag TAG ...]
-         [--remote SRC]
+         [--remote SRC | --global]
   tags                  List the project's tags with entry counts
   related ENTRY_ID [--direction both|outgoing|incoming] [--edge TYPE] [--depth N]
   history PATH [--limit N]
@@ -69,6 +69,7 @@ Usage: elephant [--cwd DIR] [--db FILE.zova] COMMAND
          [--stale-remote-days N]  Deterministic read-only memory health review
   add fact|decision|task --title TEXT --body TEXT [--target-version TEXT] [--file PATH ...]
                         [--relation TYPE:ENTRY_UUID ...] [--tag TAG ...] [--supersedes DECISION_ID]
+                        [--global]
   update fact|decision|task ID [--title TEXT] [--body TEXT] [--status STATUS]
          [--target-version TEXT] [--file PATH ... | --clear-files] [--relation TYPE:ENTRY_UUID ...]
          [--tag TAG ... | --clear-tags]
@@ -95,6 +96,10 @@ recall includes the latest checkpoint before older project context, and
 changed_files lists uncommitted files that have linked entries.
 recall --brief prints a short text digest for session-start hooks. It never
 creates the database or a project, and prints nothing when there is no memory.
+add --global writes global memory shared by every project, also outside Git;
+it takes no files or relations and records the source project. recall and
+recall --brief show unfinished global entries tagged pinned; search --global
+finds any global entry, and inspect or update reach one by ID.
 Export output is deterministic for unchanged state; import validates fully
 before committing and never overwrites local truth.
 Review is read-only and deterministic; thresholds default to 30/90/30 days.
@@ -353,6 +358,7 @@ func run(ctx context.Context, args []string, out, logs io.Writer) error {
 		var tags fileFlags
 		f.Var(&tags, "tag", "required tag; repeatable")
 		source := f.String("remote", "", "source Elephant UUID or registered name")
+		global := f.Bool("global", false, "search global memory instead of the project")
 		limit := f.Int("limit", 20, "maximum results (1-50)")
 		offset := f.Int("offset", 0, "pagination offset")
 		if err = parseFlags(f, rest); err != nil {
@@ -380,7 +386,7 @@ func run(ctx context.Context, args []string, out, logs io.Writer) error {
 		if f.NArg() == 1 {
 			query = f.Arg(0)
 		}
-		result, err = service.Search(ctx, *cwd, app.SearchFilters{Query: query, Kind: model.Kind(*kind), Status: *status, Actor: *actor, TargetVersion: *version, Commit: *commit, CommitStart: *commitStart, CommitEnd: *commitEnd, File: *file, Tags: tags, Source: *source, UpdatedAfter: after, UpdatedBefore: before, Limit: *limit, Offset: *offset})
+		result, err = service.Search(ctx, *cwd, app.SearchFilters{Query: query, Kind: model.Kind(*kind), Status: *status, Actor: *actor, TargetVersion: *version, Commit: *commit, CommitStart: *commitStart, CommitEnd: *commitEnd, File: *file, Tags: tags, Source: *source, Global: *global, UpdatedAfter: after, UpdatedBefore: before, Limit: *limit, Offset: *offset})
 	case "related":
 		f := flag.NewFlagSet("related", flag.ContinueOnError)
 		f.SetOutput(logs)

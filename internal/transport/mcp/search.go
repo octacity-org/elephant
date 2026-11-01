@@ -24,6 +24,7 @@ type searchInput struct {
 	File          string     `json:"file,omitempty"`
 	Tags          []string   `json:"tags,omitempty"`
 	Remote        string     `json:"remote,omitempty"`
+	Global        bool       `json:"global,omitempty"`
 	UpdatedAfter  string     `json:"updated_after,omitempty"`
 	UpdatedBefore string     `json:"updated_before,omitempty"`
 	Limit         int        `json:"limit,omitempty"`
@@ -70,12 +71,12 @@ type historyInput struct {
 }
 
 func registerSearch(s *sdk.Server, service *app.Service, cwd func(string) string) {
-	register(s, "search_entries", "Deterministic text search with composable filters and match metadata; project-scoped with stable ordering. query is split into words, and an entry matches when every word appears in its title or body (case-insensitive substring, any order); a \"double-quoted phrase\" must appear as written; at most 16 terms. tags requires every listed tag. updated_after/updated_before take RFC3339 timestamps. commit/commit_start/commit_end request an inclusive Git commit range resolved in the local repository (entries match when their recorded commit interval intersects it); an unresolvable bound, reversed endpoints, or endpoints on divergent histories are invalid-input errors.", func(ctx context.Context, in searchInput) ([]app.SearchResult, error) {
+	register(s, "search_entries", "Deterministic text search with composable filters and match metadata; project-scoped with stable ordering. query is split into words, and an entry matches when every word appears in its title or body (case-insensitive substring, any order); a \"double-quoted phrase\" must appear as written; at most 16 terms. tags requires every listed tag. global searches global memory, shared by every project, instead of the project; it takes no file, commit, or remote filter. updated_after/updated_before take RFC3339 timestamps. commit/commit_start/commit_end request an inclusive Git commit range resolved in the local repository (entries match when their recorded commit interval intersects it); an unresolvable bound, reversed endpoints, or endpoints on divergent histories are invalid-input errors.", func(ctx context.Context, in searchInput) ([]app.SearchResult, error) {
 		after, before, err := parseTimeFilters(in.UpdatedAfter, in.UpdatedBefore)
 		if err != nil {
 			return nil, err
 		}
-		return service.Search(ctx, cwd(in.CWD), app.SearchFilters{Query: in.Query, Kind: in.Kind, Status: in.Status, Actor: in.Actor, TargetVersion: in.TargetVersion, Commit: in.Commit, CommitStart: in.CommitStart, CommitEnd: in.CommitEnd, File: in.File, Tags: in.Tags, Source: in.Remote, UpdatedAfter: after, UpdatedBefore: before, Limit: in.Limit, Offset: in.Offset})
+		return service.Search(ctx, cwd(in.CWD), app.SearchFilters{Query: in.Query, Kind: in.Kind, Status: in.Status, Actor: in.Actor, TargetVersion: in.TargetVersion, Commit: in.Commit, CommitStart: in.CommitStart, CommitEnd: in.CommitEnd, File: in.File, Tags: in.Tags, Source: in.Remote, Global: in.Global, UpdatedAfter: after, UpdatedBefore: before, Limit: in.Limit, Offset: in.Offset})
 	})
 	register(s, "related_entries", "Bounded graph traversal from one entry with direction, edge type, depth, and limits; never crosses project boundaries.", func(ctx context.Context, in relatedInput) ([]app.RelatedResult, error) {
 		depth := in.Depth

@@ -126,6 +126,9 @@ func TestMCPToolsValidationAndContinuity(t *testing.T) {
 	}{
 		{"list_tags", map[string]any{}, `{"entries":1,"tag":"build"}`},
 		{"search_entries", map[string]any{"tags": []string{"build"}}, `"tags":["build"]`},
+		{"add_fact", map[string]any{"title": "Global", "body": "fact", "tags": []string{"pinned"}, "global": true}, `"tags":["pinned"]`},
+		{"recall_project", map[string]any{}, `"global":[{"entry":`},
+		{"search_entries", map[string]any{"global": true}, `"title":"Global"`},
 	} {
 		r, err = session.CallTool(ctx, &sdk.CallToolParams{Name: call.name, Arguments: call.args})
 		if err != nil || r.IsError {
