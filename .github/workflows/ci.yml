@@ -1,8 +1,10 @@
 name: CI and releases
 
 on:
+  # Branches are tested through pull_request; pushing them as well would run
+  # the same commits twice.
   push:
-    branches: ['**']
+    branches: [main]
     tags: ['v*']
   pull_request:
   workflow_dispatch:
