@@ -126,7 +126,7 @@ func New(service *app.Service, defaultCWD string) *sdk.Server {
 			return service.Update(ctx, cwd(in.CWD), op.kind, in.ID, app.UpdateInput{Status: &op.status})
 		})
 	}
-	register(s, "supersede_decision", "Create a replacement decision and atomically close the active decision identified by id, preserving history and a supersedes graph edge.", func(ctx context.Context, in supersedeInput) (app.Record, error) {
+	register(s, "supersede_decision", "Create a replacement decision and atomically close the active decision identified by id, preserving history and a supersedes graph edge. A global decision's replacement is global.", func(ctx context.Context, in supersedeInput) (app.Record, error) {
 		return service.Add(ctx, cwd(in.CWD), model.Decision, app.CreateInput{Title: in.Title, Body: in.Body, TargetVersion: in.TargetVersion, RelatedFiles: in.RelatedFiles, Supersedes: in.ID})
 	})
 	return s

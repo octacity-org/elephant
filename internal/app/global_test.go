@@ -89,9 +89,17 @@ func TestGlobalMemorySharedAcrossProjects(t *testing.T) {
 	if r, err := s.Recall(ctx, b, ""); err != nil || len(r.Global) != 0 {
 		t.Fatalf("retired entry still pinned: %+v %v", r.Global, err)
 	}
-	replacement, err := s.Add(ctx, b, model.Decision, app.CreateInput{Title: "Prefer stacked PRs", Body: "Review in order", Supersedes: unpinned.Entry.ID, Global: true})
+	// Superseding a global decision writes a global replacement without
+	// global set, so supersede_decision needs no scope of its own.
+	replacement, err := s.Add(ctx, b, model.Decision, app.CreateInput{Title: "Prefer stacked PRs", Body: "Review in order", Supersedes: unpinned.Entry.ID})
 	if err != nil {
 		t.Fatal(err)
+	}
+	if found, err := s.Search(ctx, a, app.SearchFilters{Global: true, Query: "stacked"}); err != nil || len(found) != 1 || found[0].Entry.ID != replacement.Entry.ID {
+		t.Fatalf("replacement not global: %v %v", found, err)
+	}
+	if found, err := s.Search(ctx, b, app.SearchFilters{Query: "stacked"}); err != nil || len(found) != 0 {
+		t.Fatalf("replacement written to the project: %v %v", found, err)
 	}
 	old, err := s.Get(ctx, a, unpinned.Entry.ID)
 	if err != nil || old.Entry.Status != "superseded" || old.Entry.EndCommit != nil || replacement.Entry.StartCommit != nil {
