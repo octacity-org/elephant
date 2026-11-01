@@ -32,9 +32,10 @@ func parseCreate(name string, args []string, logs io.Writer) (app.CreateInput, e
 	body := f.String("body", "", "context and reasoning")
 	target := f.String("target-version", "", "release or milestone")
 	supersedes := f.String("supersedes", "", "active decision ID this decision replaces")
-	var files, relations fileFlags
+	var files, relations, tags fileFlags
 	f.Var(&files, "file", "related file, relative to the working directory; repeatable")
 	f.Var(&relations, "relation", "TYPE:ENTRY_UUID; repeatable")
+	f.Var(&tags, "tag", "tag; repeatable")
 	if err := parseFlags(f, args); err != nil {
 		return app.CreateInput{}, err
 	}
@@ -45,7 +46,7 @@ func parseCreate(name string, args []string, logs io.Writer) (app.CreateInput, e
 	if err != nil {
 		return app.CreateInput{}, err
 	}
-	in := app.CreateInput{Title: *title, Body: *body, RelatedFiles: files, Relations: links, Supersedes: *supersedes}
+	in := app.CreateInput{Title: *title, Body: *body, RelatedFiles: files, Relations: links, Supersedes: *supersedes, Tags: tags}
 	if *target != "" {
 		in.TargetVersion = target
 	}
@@ -81,7 +82,7 @@ func runSupersede(ctx context.Context, s *app.Service, cwd string, args []string
 
 // runUpdate mirrors update_fact, update_decision, and update_task. Only
 // flags that are given change the entry; --file replaces all file links and
-// --clear-files removes them.
+// --clear-files removes them, and --tag and --clear-tags do the same for tags.
 func runUpdate(ctx context.Context, s *app.Service, cwd string, args []string, logs io.Writer) (any, error) {
 	if len(args) < 2 || strings.HasPrefix(args[1], "-") {
 		return nil, fmt.Errorf("%w: update requires fact|decision|task ID", model.ErrInvalidInput)
@@ -94,8 +95,10 @@ func runUpdate(ctx context.Context, s *app.Service, cwd string, args []string, l
 	status := f.String("status", "", "new lifecycle status")
 	target := f.String("target-version", "", "release or milestone; empty clears it")
 	clearFiles := f.Bool("clear-files", false, "remove all related file links")
-	var files, relations fileFlags
+	clearTags := f.Bool("clear-tags", false, "remove all tags")
+	var files, relations, tags fileFlags
 	f.Var(&files, "file", "replacement related file; repeatable")
+	f.Var(&tags, "tag", "replacement tag; repeatable")
 	f.Var(&relations, "relation", "TYPE:ENTRY_UUID to add; repeatable")
 	if err := parseFlags(f, args[2:]); err != nil {
 		return nil, err
@@ -105,6 +108,9 @@ func runUpdate(ctx context.Context, s *app.Service, cwd string, args []string, l
 	}
 	if *clearFiles && len(files) > 0 {
 		return nil, fmt.Errorf("%w: use either --file or --clear-files", model.ErrInvalidInput)
+	}
+	if *clearTags && len(tags) > 0 {
+		return nil, fmt.Errorf("%w: use either --tag or --clear-tags", model.ErrInvalidInput)
 	}
 	links, err := parseRelations(relations)
 	if err != nil {
@@ -129,6 +135,13 @@ func runUpdate(ctx context.Context, s *app.Service, cwd string, args []string, l
 			replacement = []string{}
 		}
 		in.RelatedFiles = &replacement
+	}
+	if len(tags) > 0 || *clearTags {
+		replacement := []string(tags)
+		if replacement == nil {
+			replacement = []string{}
+		}
+		in.Tags = &replacement
 	}
 	return s.Update(ctx, cwd, kind, id, in)
 }

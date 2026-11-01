@@ -15,9 +15,10 @@ import (
 )
 
 // SearchResult pairs an entry with deterministic match metadata explaining why
-// it matched (title, body, actor, file, relation, etc.).
+// it matched (title, body, actor, file, tag, etc.), and the entry's tags.
 type SearchResult struct {
 	Entry model.Entry `json:"entry"`
+	Tags  []string    `json:"tags"`
 	Match []string    `json:"match"`
 }
 
@@ -25,6 +26,7 @@ type SearchResult struct {
 // table; empty means the local project. Commit, CommitStart and CommitEnd
 // request an inclusive Git commit range resolved against the local
 // repository; Commit is the single-commit shorthand for a range of one.
+// Tags requires every listed tag on a matching entry.
 type SearchFilters struct {
 	Query         string
 	Kind          model.Kind
@@ -35,6 +37,7 @@ type SearchFilters struct {
 	CommitStart   string
 	CommitEnd     string
 	File          string
+	Tags          []string
 	Source        string
 	UpdatedAfter  *time.Time
 	UpdatedBefore *time.Time
@@ -234,6 +237,10 @@ func (s *Service) Search(ctx context.Context, cwd string, f SearchFilters) (out 
 	if err != nil {
 		return nil, err
 	}
+	tags, err := model.NormalizeTags(f.Tags)
+	if err != nil {
+		return nil, err
+	}
 	g, err := gitrepo.Inspect(ctx, cwd)
 	if err != nil {
 		return nil, err
@@ -283,7 +290,7 @@ func (s *Service) Search(ctx context.Context, cwd string, f SearchFilters) (out 
 				return nil, false, err
 			}
 			exhausted := len(entries) < searchPage
-			if cleanFile == "" && matcher == nil {
+			if cleanFile == "" && len(tags) == 0 && matcher == nil {
 				return entries, exhausted, nil
 			}
 			filtered := make([]model.Entry, 0, len(entries))
@@ -297,7 +304,7 @@ func (s *Service) Search(ctx context.Context, cwd string, f SearchFilters) (out 
 						continue
 					}
 				}
-				if cleanFile == "" {
+				if cleanFile == "" && len(tags) == 0 {
 					filtered = append(filtered, e)
 					continue
 				}
@@ -305,12 +312,13 @@ func (s *Service) Search(ctx context.Context, cwd string, f SearchFilters) (out 
 				if err != nil {
 					return nil, false, err
 				}
-				for _, r := range links {
-					if r.To == "file:"+project.ID+":"+cleanFile {
-						filtered = append(filtered, e)
-						break
-					}
+				if cleanFile != "" && !slices.ContainsFunc(links, func(r model.Relation) bool { return r.To == "file:"+project.ID+":"+cleanFile }) {
+					continue
 				}
+				if !isSubset(tags, tagsOf(links)) {
+					continue
+				}
+				filtered = append(filtered, e)
 			}
 			return filtered, exhausted, nil
 		}
@@ -349,6 +357,9 @@ func (s *Service) Search(ctx context.Context, cwd string, f SearchFilters) (out 
 				if cleanFile != "" {
 					match = append(match, "file")
 				}
+				if len(tags) > 0 {
+					match = append(match, "tag")
+				}
 				if len(match) == 0 {
 					match = []string{"filter"}
 				}
@@ -357,7 +368,11 @@ func (s *Service) Search(ctx context.Context, cwd string, f SearchFilters) (out 
 					collected++
 					continue
 				}
-				out = append(out, SearchResult{Entry: e, Match: match})
+				links, err := tx.Relations(model.EntryNode(project, e.ID))
+				if err != nil {
+					return err
+				}
+				out = append(out, SearchResult{Entry: e, Tags: tagsOf(links), Match: match})
 				collected++
 				if collected >= skip+limit {
 					break
@@ -597,4 +612,14 @@ func fileEntries(tx storage.Tx, project model.Project, clean string) ([]model.En
 		return out[i].UpdatedAt.After(out[j].UpdatedAt)
 	})
 	return out, nil
+}
+
+// isSubset reports whether every element of want is in have.
+func isSubset(want, have []string) bool {
+	for _, w := range want {
+		if !slices.Contains(have, w) {
+			return false
+		}
+	}
+	return true
 }

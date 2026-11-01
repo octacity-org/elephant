@@ -307,6 +307,12 @@ func (s *Service) Import(ctx context.Context, data []byte, asRemote string) (out
 		if !ok {
 			return out, fmt.Errorf("%w: relation source unknown", model.ErrInvalidInput)
 		}
+		if tag, ok := model.TagFromNode(r.To); ok {
+			if normalized, err := model.NormalizeTags([]string{tag}); err != nil || normalized[0] != tag || r.Type != model.TagEdge {
+				return out, fmt.Errorf("%w: invalid tag edge", model.ErrInvalidInput)
+			}
+			continue
+		}
 		if isFileNode(r.To) {
 			file := filePathFromNode(r.To)
 			if _, err := model.CleanFile(file); err != nil {
@@ -434,7 +440,9 @@ func (s *Service) Import(ctx context.Context, data []byte, asRemote string) (out
 			fromID, _ := entryIDFromNode(r.From)
 			toRewrite := r
 			toRewrite.From = model.EntryNode(src, fromID)
-			if !isFileNode(r.To) {
+			if _, ok := model.TagFromNode(r.To); ok {
+				// Tag nodes belong to no project and need no rewrite.
+			} else if !isFileNode(r.To) {
 				toID, _ := entryIDFromNode(r.To)
 				toRewrite.To = model.EntryNode(src, toID)
 			} else {

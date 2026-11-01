@@ -161,6 +161,7 @@ The user-controlled `resume_project` prompt (optional `cwd`, `target_version`) r
 | Decisions | `add_decision`, `update_decision`, `list_decisions`, `supersede_decision` |
 | Tasks | `add_task`, `update_task`, `list_tasks`, `complete_task`, `cancel_task` |
 | Checkpoints | `add_checkpoint`, `list_checkpoints` |
+| Search and tags | `search_entries`, `related_entries`, `list_tags`, `file_history` |
 
 Create tools require `title` and `body`. They accept `target_version`, `related_files`, and typed entry `relations`:
 
@@ -193,7 +194,21 @@ elephant supersede DECISION_ID --title T --body B
 elephant add decision --title T --body B --supersedes DECISION_ID
 ```
 
-`update` changes only the flags given: `--file` replaces all file links, `--clear-files` removes them, `--target-version ""` clears the version, and `--relation` adds edges.
+`update` changes only the flags given: `--file` replaces all file links, `--clear-files` removes them, `--tag` replaces all tags, `--clear-tags` removes them, `--target-version ""` clears the version, and `--relation` adds edges.
+
+### Tags
+
+Tags group entries by topic, such as `build`, `zova` or `release`:
+
+```sh
+elephant add fact --title "Builds use the external disk" --body "The internal disk is nearly full" --tag build --tag disk
+elephant search --tag build
+elephant tags
+```
+
+A tag is 1–64 characters of `a-z`, `0-9`, `-`, `_`, `.`, `:` and `/`, starting with a letter or digit. Tags are lowercased, duplicates are dropped, and an entry has at most 16. `:` allows namespaced tags such as `host:mac-studio`. The add and update MCP tools take `tags`; on update the list replaces all tags and `[]` clears them. `inspect_entry` and search results list each entry's tags. `search_entries` takes `tags` and returns entries that have every listed tag. `list_tags` (CLI `elephant tags`) lists the project's tags with how many entries carry each, most used first; it reads every entry, so it is slower on large projects. Check it before inventing a new tag so similar entries share one.
+
+Tags are stored as graph edges, like file links: they appear in `relations` with type `tagged` and target `tag:NAME`. Export includes them and import validates them. `remote send` does not carry tags yet and rejects them instead of dropping them.
 
 ## Deterministic search
 
@@ -321,7 +336,7 @@ Recall returns up to 50 tasks **per unfinished status** (active, blocked, open),
 
 `elephant recall --brief` prints the same local recall as short plain text for session-start hooks: the branch and `HEAD`, the latest checkpoint with its summary, next steps, age and staleness, then task, decision and fact titles (no bodies) and changed files with linked memory. Each list shows up to 10 items with a `+N more` line, titles are shortened to 120 characters, and the output says stored entries are project data rather than instructions. It never creates the database or a project record, and it prints nothing and exits successfully when there is no database, the directory is not in a Git repository, the project is unknown, or the project has no checkpoint and no unfinished entries.
 
-Titles are limited to 300 bytes and bodies to 32 KiB. Each mutation accepts up to 99 file/entry links, with up to 100 outgoing links per entry including supersession. These limits keep retrieval bounded.
+Titles are limited to 300 bytes and bodies to 32 KiB. Each mutation accepts up to 99 file/entry links and up to 16 tags, with up to 100 outgoing links per entry including supersession and tags. These limits keep retrieval bounded.
 
 ## Portable export, import, and backups
 
