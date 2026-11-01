@@ -76,8 +76,9 @@ Usage: elephant [--cwd DIR] [--db FILE.zova] COMMAND
   complete|cancel TASK_ID  Close a task
   retire FACT_ID        Retire a fact
   supersede DECISION_ID --title TEXT --body TEXT [add flags]  Replace an active decision
-  remote send fact --title TEXT --body TEXT [--evidence EVIDENCE_ID ...]
-                   [--file PATH ...] [--relation TYPE:ENTRY_UUID ...] [--tag TAG ...] [--global]
+  remote send NAME fact|decision|task --title TEXT --body TEXT [--target-version TEXT]
+                   [--file PATH ...] [--relation TYPE:ENTRY_UUID ...] [--evidence EVIDENCE_ID ...]
+                   [--tag TAG ...] [--supersedes DECISION_ID] [--global]
   --version             Print version
 
 Use recall --remote NAME_OR_UUID for a locally stored remote source table.

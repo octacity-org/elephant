@@ -43,7 +43,7 @@ For an installed C ABI archive, point these flags at its `include` and `lib` dir
 
 ## CI and GitHub releases
 
-[The GitHub Actions workflow](.github/workflows/ci.yml) tests every branch push and pull request on exactly these four native runners:
+[The GitHub Actions workflow](.github/workflows/ci.yml) tests every pull request, every push to `main`, and every `v*` tag on exactly these four native runners. Branch pushes run only through their pull request, so a branch without one is not tested unless you start the workflow manually:
 
 | Platform | Runner | Release archive |
 | --- | --- | --- |
@@ -273,7 +273,7 @@ Each row reports one of four states: **unchanged** (the current selected bytes m
 
 Recall includes a bounded evidence section for active facts (limit 50) with the computed state per row. MCP exposes `add_evidence`, `list_evidence`, `verify_evidence`, `refresh_evidence`, and `remove_evidence`.
 
-Evidence can travel with a fact: `elephant remote send fact --evidence EVIDENCE_ID ...` attaches local evidence rows to the outgoing message. On send, rows are rebound to the new entry ID with fresh IDs and provenance (path, line, commit, digest) preserved; the receiver stores them with the sent entry and re-verifies them against its own checkout on recall, reporting `unavailable` when it cannot read the recorded commit or has no matching source. Sending is explicit per row — evidence never travels automatically.
+Evidence can travel with a fact: `elephant remote send NAME fact --evidence EVIDENCE_ID ...` attaches local evidence rows to the outgoing message. On send, rows are rebound to the new entry ID with fresh IDs and provenance (path, line, commit, digest) preserved; the receiver stores them with the sent entry and re-verifies them against its own checkout on recall, reporting `unavailable` when it cannot read the recorded commit or has no matching source. Sending is explicit per row — evidence never travels automatically.
 
 ## Session checkpoints
 
