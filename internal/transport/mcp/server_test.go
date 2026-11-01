@@ -8,10 +8,12 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"uuid"
 
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"elephant/internal/app"
+	"elephant/internal/model"
 	"elephant/internal/storage/zova"
 )
 
@@ -52,7 +54,8 @@ func TestMCPToolsValidationAndContinuity(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	server := New(app.New(db), cwd)
+	service := app.New(db)
+	server := New(service, cwd)
 	st, ct := sdk.NewInMemoryTransports()
 	ss, err := server.Connect(ctx, st, nil)
 	if err != nil {
@@ -119,6 +122,12 @@ func TestMCPToolsValidationAndContinuity(t *testing.T) {
 	if err != nil || r.IsError {
 		t.Fatal(r, err)
 	}
+	// A peer's global memory is read and adopted with global.
+	peer, now := uuid.NewV7().String(), time.Now().UTC()
+	sent := &model.Entry{ID: uuid.NewV7().String(), Kind: model.Fact, Title: "Peer rule", Body: "fact", Status: "active", ActorID: "peer", CreatedAt: now, UpdatedAt: now}
+	if _, err = service.Receive(ctx, app.Message{ProtocolVersion: 1, MessageID: uuid.NewV7().String(), SenderElephantID: peer, Project: app.ProjectRef{Identity: model.GlobalIdentity, Name: "global"}, Operation: "entry.send", Entry: sent}); err != nil {
+		t.Fatal(err)
+	}
 	for _, call := range []struct {
 		name string
 		args map[string]any
@@ -129,6 +138,9 @@ func TestMCPToolsValidationAndContinuity(t *testing.T) {
 		{"add_fact", map[string]any{"title": "Global", "body": "fact", "tags": []string{"pinned"}, "global": true}, `"tags":["pinned"]`},
 		{"recall_project", map[string]any{}, `"global":[{"entry":`},
 		{"search_entries", map[string]any{"global": true}, `"title":"Global"`},
+		{"remote_recall", map[string]any{"remote": peer, "global": true}, `"title":"Peer rule"`},
+		{"remote_diff", map[string]any{"remote": peer, "global": true}, `"remote_only":[{`},
+		{"adopt_entry", map[string]any{"id": sent.ID, "remote": peer, "global": true}, `"source_entry_id":"` + sent.ID},
 	} {
 		r, err = session.CallTool(ctx, &sdk.CallToolParams{Name: call.name, Arguments: call.args})
 		if err != nil || r.IsError {

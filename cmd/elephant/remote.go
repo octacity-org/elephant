@@ -32,10 +32,19 @@ func runRemote(ctx context.Context, s *app.Service, cwd string, args []string, l
 		return s.Inbox(ctx)
 	}
 	if op == "diff" {
-		if len(args) != 1 {
+		f := flag.NewFlagSet("remote diff", flag.ContinueOnError)
+		f.SetOutput(logs)
+		global := f.Bool("global", false, "compare what the peer sent from its global memory with local global memory")
+		if err := parseFlags(f, args); err != nil {
+			return nil, err
+		}
+		if f.NArg() != 1 {
 			return nil, fmt.Errorf("%w: remote diff requires a remote name or source UUID", model.ErrInvalidInput)
 		}
-		return s.Diff(ctx, cwd, args[0])
+		if *global {
+			return s.DiffGlobal(ctx, cwd, f.Arg(0))
+		}
+		return s.Diff(ctx, cwd, f.Arg(0))
 	}
 	if len(args) == 0 {
 		return nil, fmt.Errorf("%w: remote name required", model.ErrInvalidInput)
@@ -86,6 +95,7 @@ func runRemote(ctx context.Context, s *app.Service, cwd string, args []string, l
 		body := f.String("body", "", "context")
 		version := f.String("target-version", "", "release or milestone")
 		supersedes := f.String("supersedes", "", "remote decision ID")
+		global := f.Bool("global", false, "send into the peer's copy of this Elephant's global memory")
 		var files, relations, evidence, tags fileFlags
 		f.Var(&files, "file", "file, relative to the working directory; repeatable")
 		f.Var(&relations, "relation", "TYPE:ENTRY_UUID; repeatable")
@@ -97,7 +107,7 @@ func runRemote(ctx context.Context, s *app.Service, cwd string, args []string, l
 		if f.NArg() != 0 {
 			return nil, model.ErrInvalidInput
 		}
-		in := app.CreateInput{Title: *title, Body: *body, RelatedFiles: files, Supersedes: *supersedes, Tags: tags}
+		in := app.CreateInput{Title: *title, Body: *body, RelatedFiles: files, Supersedes: *supersedes, Tags: tags, Global: *global}
 		if *version != "" {
 			in.TargetVersion = version
 		}

@@ -14,6 +14,10 @@ type remoteScope struct {
 	scope
 	Remote string `json:"remote" jsonschema:"Registered peer name; remote_recall also accepts a source Elephant UUID"`
 }
+type remoteRecallInput struct {
+	remoteScope
+	Global bool `json:"global,omitempty" jsonschema:"Read what the peer sent from its global memory"`
+}
 type remoteCreate struct {
 	remoteScope
 	app.CreateInput
@@ -21,7 +25,10 @@ type remoteCreate struct {
 
 func registerRemotes(s *sdk.Server, service *app.Service, cwd func(string) string) {
 	register(s, "list_remotes", "List configured remote peers without contacting them.", func(ctx context.Context, in struct{}) ([]model.Remote, error) { return service.ListRemotes(ctx) })
-	register(s, "remote_recall", "Show locally received state from one source Elephant, kept separate from local state.", func(ctx context.Context, in remoteScope) (app.RecallResult, error) {
+	register(s, "remote_recall", "Show locally received state from one source Elephant, kept separate from local state. global reads what it sent from its global memory.", func(ctx context.Context, in remoteRecallInput) (app.RecallResult, error) {
+		if in.Global {
+			return service.RecallRemoteGlobal(ctx, cwd(in.CWD), in.Remote)
+		}
 		return service.RecallRemote(ctx, cwd(in.CWD), in.Remote)
 	})
 	register(s, "ensure_remote_project", "Ask a peer to create this Elephant's source table without changing the peer's local state.", func(ctx context.Context, in remoteScope) (app.Response, error) {
@@ -32,7 +39,7 @@ func registerRemotes(s *sdk.Server, service *app.Service, cwd func(string) strin
 		return service.Send(ctx, remote.ASH{}, in.Remote, m)
 	})
 	for _, kind := range []model.Kind{model.Fact, model.Decision, model.Task} {
-		register(s, "remote_send_"+string(kind), "Send a new "+string(kind)+" into this Elephant's source table on a registered peer, preserving actor provenance and tags. adopt_entry copies the tags.", func(ctx context.Context, in remoteCreate) (app.Response, error) {
+		register(s, "remote_send_"+string(kind), "Send a new "+string(kind)+" into this Elephant's source table on a registered peer, preserving actor provenance and tags. adopt_entry copies the tags. global: true sends it into the peer's copy of this Elephant's global memory; it takes no files, relations other than supersedes, or evidence.", func(ctx context.Context, in remoteCreate) (app.Response, error) {
 			m, err := service.BuildMessage(ctx, cwd(in.CWD), "entry.send", kind, in.CreateInput)
 			if err != nil {
 				return app.Response{}, err

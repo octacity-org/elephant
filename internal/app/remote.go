@@ -58,8 +58,11 @@ func validateMessage(m Message) error {
 	if !validText(m.Project.Identity, 2048) || !validText(m.Project.Name, 300) || strings.HasPrefix(m.Project.Identity, "local:") || strings.HasPrefix(m.Project.Identity, "/") {
 		return fmt.Errorf("%w: portable project identity required", model.ErrInvalidInput)
 	}
+	// Global memory has a reserved identity that is not a repository, so
+	// peers from before global memory reject it here.
+	global := m.Project.Identity == model.GlobalIdentity
 	normalized, err := gitrepo.NormalizeRemote("https://" + m.Project.Identity)
-	if err != nil || normalized != m.Project.Identity || strings.ContainsAny(m.Project.Identity, "\\ @\t") || strings.Contains("/"+m.Project.Identity+"/", "/../") {
+	if !global && (err != nil || normalized != m.Project.Identity || strings.ContainsAny(m.Project.Identity, "\\ @\t") || strings.Contains("/"+m.Project.Identity+"/", "/../")) {
 		return fmt.Errorf("%w: canonical host/repository project identity required", model.ErrInvalidInput)
 	}
 	if m.Operation != "entry.send" && m.Operation != "project.ensure" && m.Operation != "project.recall" {
@@ -76,6 +79,9 @@ func validateMessage(m Message) error {
 	}
 	if err := m.Entry.Validate(); err != nil {
 		return err
+	}
+	if global && (len(m.Files)+len(m.Evidence) > 0 || m.Entry.StartCommit != nil || m.Entry.EndCommit != nil || slices.ContainsFunc(m.Relations, func(r RelationInput) bool { return r.Type != "supersedes" })) {
+		return fmt.Errorf("%w: global entries carry no files, evidence, commits, or relations other than supersedes", model.ErrInvalidInput)
 	}
 	for _, c := range []*string{m.Entry.StartCommit, m.Entry.EndCommit} {
 		if c != nil && (!validText(*c, 128) || strings.ContainsAny(*c, " \t")) {
@@ -236,7 +242,16 @@ func (s *Service) RecallSource(ctx context.Context, ref ProjectRef, source, vers
 	})
 }
 func (s *Service) RecallRemote(ctx context.Context, cwd, selector string) (RecallResult, error) {
-	g, err := gitrepo.Inspect(ctx, cwd)
+	return s.recallRemote(ctx, cwd, selector, false)
+}
+
+// RecallRemoteGlobal shows what a peer sent from its global memory. It works
+// outside Git.
+func (s *Service) RecallRemoteGlobal(ctx context.Context, cwd, selector string) (RecallResult, error) {
+	return s.recallRemote(ctx, cwd, selector, true)
+}
+func (s *Service) recallRemote(ctx context.Context, cwd, selector string, global bool) (RecallResult, error) {
+	g, err := remoteScope(ctx, cwd, global)
 	if err != nil {
 		return RecallResult{}, err
 	}
@@ -275,8 +290,17 @@ func (s *Service) RemoveRemote(ctx context.Context, name string) error {
 	}
 	return s.store.Transact(ctx, func(tx storage.Tx) error { return tx.RemoveRemote(name) })
 }
+
+// remoteScope returns the project a remote operation works on: the repository
+// at cwd, or global memory, which needs no repository.
+func remoteScope(ctx context.Context, cwd string, global bool) (gitrepo.Metadata, error) {
+	if global {
+		return globalMetadata, nil
+	}
+	return gitrepo.Inspect(ctx, cwd)
+}
 func (s *Service) BuildMessage(ctx context.Context, cwd, operation string, k model.Kind, in CreateInput) (Message, error) {
-	g, err := gitrepo.Inspect(ctx, cwd)
+	g, err := remoteScope(ctx, cwd, in.Global)
 	if err != nil {
 		return Message{}, err
 	}
@@ -285,8 +309,10 @@ func (s *Service) BuildMessage(ctx context.Context, cwd, operation string, k mod
 		return Message{}, err
 	}
 	m := Message{ProtocolVersion: 1, MessageID: uuid.NewV7().String(), SenderElephantID: self, Project: ProjectRef{g.Identity, g.Name}, Operation: operation}
-	if in.Global {
-		return Message{}, fmt.Errorf("%w: remote send does not carry global entries", model.ErrInvalidInput)
+	// Evidence is read from a repository, which global memory does not have;
+	// validateMessage rejects the other parts a global entry cannot carry.
+	if in.Global && len(in.Evidence) > 0 {
+		return Message{}, fmt.Errorf("%w: global entries carry no evidence", model.ErrInvalidInput)
 	}
 	if operation == "entry.send" {
 		now := time.Now().UTC()

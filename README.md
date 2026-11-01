@@ -221,7 +221,7 @@ elephant search --global disk
 
 `--global` (MCP `global: true` on the add tools and `search_entries`) stores or searches global memory. Global entries live in one shared project, so every repository on this Elephant sees the same entries. They take tags but no related files, links to project entries or evidence, and they record no commits, because those belong to one repository. Each global entry records the project it was written from as an `origin` relation to `project:IDENTITY`; written outside a Git repository, where only global writes work, it has no origin.
 
-Recall shows the unfinished global entries tagged `pinned` in a `global` section, newest first and at most 20, with each entry's origin; `recall --brief` lists their titles first, also in a repository Elephant does not know or outside Git. Untagged global entries are found with search only. `inspect`, `update`, `retire`, `complete` and `cancel` take a global entry's ID from any repository. Superseding a global decision, with `supersede` or `supersedes`, writes the replacement to global memory too. Export, import, remote send and `list_tags` cover only the project, not global memory.
+Recall shows the unfinished global entries tagged `pinned` in a `global` section, newest first and at most 20, with each entry's origin; `recall --brief` lists their titles first, also in a repository Elephant does not know or outside Git. Untagged global entries are found with search only. `inspect`, `update`, `retire`, `complete` and `cancel` take a global entry's ID from any repository. Superseding a global decision, with `supersede` or `supersedes`, writes the replacement to global memory too. Export, import and `list_tags` cover only the project, not global memory; remote send and adopt reach it with `--global` (see [Sharing state with another Elephant](#sharing-state-with-another-elephant)).
 
 A global fact can be true on one machine only, such as a path to a disk that only one machine has. Tag it `host:NAME` to limit it to that machine: recall then shows it only where the current host name is `NAME`, while entries without a `host:` tag show everywhere and an entry may name several hosts. The current host name is `ELEPHANT_HOST` when set, otherwise the operating system's host name, lowercased with characters a tag cannot hold replaced by `-`; recall reports it as `host`. Search does not filter by host, so another machine's entries can still be found and edited.
 
@@ -325,7 +325,18 @@ elephant adopt ENTRY_ID --from fedora
 
 `inbox` groups received additions by source Elephant and project. `diff` compares one source table with local state, listing `remote_only` entries that have not been adopted. `adopt` creates a new local entry with a new local ID, copies file links, copies entry relations only when their local targets resolve safely, and records source provenance; repeating the same adoption returns the existing local entry. The adopted entry keeps its lifecycle status (a done task stays done), except that a superseded decision is adopted as active. An adopted `supersedes` link follows the local rule: it marks the replaced local decision superseded, and it is skipped and reported when that decision is no longer active. No automatic merging occurs.
 
-MCP adds `list_remotes`, `ensure_remote_project`, `remote_send_fact`, `remote_send_decision`, `remote_send_task`, `remote_recall`, `remote_inbox`, `remote_diff`, and `adopt_entry`. The latter reads locally received state. Existing local tools retain their local-only behavior.
+Global memory travels the same way:
+
+```bash
+elephant remote send fedora fact --global --tag pinned --title "Prefer stacked PRs" --body "Review in order"
+# On B:
+elephant recall --remote SOURCE_ELEPHANT_UUID --global
+elephant adopt ENTRY_ID --from SOURCE_ELEPHANT_UUID --global
+```
+
+`remote send --global` sends into the peer's copy of this Elephant's global memory: a source table under the reserved identity `elephant:global`, kept apart from the peer's projects and from its own global memory. It works outside Git and takes tags and `--supersedes`, but no files, other relations, or evidence. On the receiver, `remote inbox` lists that table with project identity `elephant:global`, and `recall --remote NAME --global` and `remote diff --global NAME` read it. `adopt --global` copies an entry into local global memory with all its tags, including `pinned` and `host:` tags, so an adopted pinned entry shows in recall at once. As with project entries, the adoption records the sender as its source; the adopted entry has no `origin` project. A peer running a release from before global memory rejects these messages, because `elephant:global` is not a repository identity. `remote ensure-project` and `remote recall` stay project-only.
+
+MCP adds `list_remotes`, `ensure_remote_project`, `remote_send_fact`, `remote_send_decision`, `remote_send_task`, `remote_recall`, `remote_inbox`, `remote_diff`, and `adopt_entry`. The latter reads locally received state. The remote send tools, `remote_recall`, `remote_diff`, and `adopt_entry` take `global: true` for global memory. Existing local tools retain their local-only behavior.
 
 ### Machine protocol and ASH
 

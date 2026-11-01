@@ -107,11 +107,15 @@ func (s *Service) within(ctx context.Context, cwd string, fn func(storage.Tx, mo
 	})
 }
 
+// globalMetadata stands in for a repository when resolving the global
+// project.
+var globalMetadata = gitrepo.Metadata{Identity: model.GlobalIdentity, Name: "global"}
+
 // globalProject returns the global project. With create it is created on
 // first use; otherwise found reports whether it exists yet.
 func globalProject(tx storage.Tx, create bool) (p model.Project, found bool, err error) {
 	if create {
-		p, err = resolve(tx, gitrepo.Metadata{Identity: model.GlobalIdentity, Name: "global"})
+		p, err = resolve(tx, globalMetadata)
 		return p, err == nil, err
 	}
 	p, err = tx.Project(model.GlobalIdentity)

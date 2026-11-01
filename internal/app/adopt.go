@@ -8,7 +8,6 @@ import (
 	"time"
 	"uuid"
 
-	gitrepo "elephant/internal/git"
 	"elephant/internal/model"
 	"elephant/internal/storage"
 )
@@ -130,8 +129,17 @@ func sameContent(a, b model.Entry) bool {
 }
 
 // Diff compares a remote source table with the local project state.
-func (s *Service) Diff(ctx context.Context, cwd, selector string) (out DiffResult, err error) {
-	g, err := gitrepo.Inspect(ctx, cwd)
+func (s *Service) Diff(ctx context.Context, cwd, selector string) (DiffResult, error) {
+	return s.diff(ctx, cwd, selector, false)
+}
+
+// DiffGlobal compares what a peer sent from its global memory with local
+// global memory. It works outside Git.
+func (s *Service) DiffGlobal(ctx context.Context, cwd, selector string) (DiffResult, error) {
+	return s.diff(ctx, cwd, selector, true)
+}
+func (s *Service) diff(ctx context.Context, cwd, selector string, global bool) (out DiffResult, err error) {
+	g, err := remoteScope(ctx, cwd, global)
 	if err != nil {
 		return out, err
 	}
@@ -222,8 +230,18 @@ func resolveLocalFile(root, file string) (string, error) {
 // or validated local targets. Anything else is skipped and reported. Every
 // storage error aborts the transaction, rolling back the new entry, copied
 // links, and the provenance mapping together.
-func (s *Service) Adopt(ctx context.Context, cwd, entryID, selector string) (out AdoptResult, err error) {
-	g, err := gitrepo.Inspect(ctx, cwd)
+func (s *Service) Adopt(ctx context.Context, cwd, entryID, selector string) (AdoptResult, error) {
+	return s.adopt(ctx, cwd, entryID, selector, false)
+}
+
+// AdoptGlobal adopts an entry a peer sent from its global memory into local
+// global memory, with its tags. It works outside Git, and the new entry links
+// no files and no relations other than supersedes.
+func (s *Service) AdoptGlobal(ctx context.Context, cwd, entryID, selector string) (AdoptResult, error) {
+	return s.adopt(ctx, cwd, entryID, selector, true)
+}
+func (s *Service) adopt(ctx context.Context, cwd, entryID, selector string, global bool) (out AdoptResult, err error) {
+	g, err := remoteScope(ctx, cwd, global)
 	if err != nil {
 		return out, err
 	}
@@ -303,6 +321,10 @@ func (s *Service) Adopt(ctx context.Context, cwd, entryID, selector string) (out
 			}
 			if strings.HasPrefix(r.To, "file:"+src.ID+":") {
 				file := strings.TrimPrefix(r.To, "file:"+src.ID+":")
+				if global {
+					skipped = append(skipped, fmt.Sprintf("file %q: global entries cannot link files", file))
+					continue
+				}
 				clean, err := resolveLocalFile(g.Root, file)
 				if err != nil {
 					skipped = append(skipped, fmt.Sprintf("file %q: %v", file, err))
@@ -311,6 +333,10 @@ func (s *Service) Adopt(ctx context.Context, cwd, entryID, selector string) (out
 				if err = tx.Link(local, model.Relation{From: model.EntryNode(local, e.ID), Type: model.FileEdge(e.Kind), To: "file:" + local.ID + ":" + clean}); err != nil {
 					return err
 				}
+				continue
+			}
+			if global && r.Type != "supersedes" {
+				skipped = append(skipped, fmt.Sprintf("relation %s: global entries link only the decisions they supersede", r.Type))
 				continue
 			}
 			// Entry edge: resolve the raw entry ID suffix and map it through
