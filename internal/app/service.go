@@ -157,6 +157,24 @@ func locate(tx storage.Tx, p model.Project, id string) (model.Project, model.Ent
 	return p, e, err
 }
 
+// isGlobal reports whether id names a global entry. It never creates the
+// global project.
+func (s *Service) isGlobal(ctx context.Context, id string) (global bool, err error) {
+	err = s.store.Transact(ctx, func(tx storage.Tx) error {
+		p, found, err := globalProject(tx, false)
+		if err != nil || !found {
+			return err
+		}
+		_, err = tx.Get(p, id)
+		if errors.Is(err, model.ErrEntryNotFound) {
+			return nil
+		}
+		global = err == nil
+		return err
+	})
+	return
+}
+
 // projectOnly rejects the parts of a write that only a project entry can
 // carry: repository files and links to project entries.
 func projectOnly(p model.Project, files, relations int) error {
@@ -222,6 +240,12 @@ func (s *Service) List(ctx context.Context, cwd string, f model.Filter) (out []m
 	return
 }
 func (s *Service) Add(ctx context.Context, cwd string, k model.Kind, in CreateInput) (out Record, err error) {
+	// A replacement lives where the decision it replaces lives.
+	if in.Supersedes != "" && !in.Global {
+		if in.Global, err = s.isGlobal(ctx, in.Supersedes); err != nil {
+			return out, err
+		}
+	}
 	run := s.within
 	if in.Global {
 		run = s.withinGlobal

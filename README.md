@@ -221,7 +221,7 @@ elephant search --global disk
 
 `--global` (MCP `global: true` on the add tools and `search_entries`) stores or searches global memory. Global entries live in one shared project, so every repository on this Elephant sees the same entries. They take tags but no related files, links to project entries or evidence, and they record no commits, because those belong to one repository. Each global entry records the project it was written from as an `origin` relation to `project:IDENTITY`; written outside a Git repository, where only global writes work, it has no origin.
 
-Recall shows the unfinished global entries tagged `pinned` in a `global` section, newest first and at most 20, with each entry's origin; `recall --brief` lists their titles first, also in a repository Elephant does not know or outside Git. Untagged global entries are found with search only. `inspect`, `update`, `retire`, `complete` and `cancel` take a global entry's ID from any repository. Export, import, remote send and `list_tags` cover only the project, not global memory.
+Recall shows the unfinished global entries tagged `pinned` in a `global` section, newest first and at most 20, with each entry's origin; `recall --brief` lists their titles first, also in a repository Elephant does not know or outside Git. Untagged global entries are found with search only. `inspect`, `update`, `retire`, `complete` and `cancel` take a global entry's ID from any repository. Superseding a global decision, with `supersede` or `supersedes`, writes the replacement to global memory too. Export, import, remote send and `list_tags` cover only the project, not global memory.
 
 ## Deterministic search
 
