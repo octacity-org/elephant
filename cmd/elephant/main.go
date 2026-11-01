@@ -46,7 +46,7 @@ Usage: elephant [--cwd DIR] [--db FILE.zova] COMMAND
   status                Show project identity and Git metadata
   facts|decisions|tasks  List entries (--status, --target-version, --limit, --offset)
   inspect ID            Show an entry, its outgoing and incoming relationships, and evidence
-  adopt ENTRY_ID --from NAME_OR_UUID  Promote a received entry into local truth
+  adopt ENTRY_ID --from NAME_OR_UUID [--global]  Promote a received entry into local truth
   evidence add ENTRY_ID --file PATH [--line N]
   evidence list|verify ENTRY_ID
   evidence refresh ENTRY_ID [--evidence EVIDENCE_ID]
@@ -77,13 +77,14 @@ Usage: elephant [--cwd DIR] [--db FILE.zova] COMMAND
   retire FACT_ID        Retire a fact
   supersede DECISION_ID --title TEXT --body TEXT [add flags]  Replace an active decision
   remote send fact --title TEXT --body TEXT [--evidence EVIDENCE_ID ...]
-                   [--file PATH ...] [--relation TYPE:ENTRY_UUID ...] [--tag TAG ...]
+                   [--file PATH ...] [--relation TYPE:ENTRY_UUID ...] [--tag TAG ...] [--global]
   --version             Print version
 
 Use recall --remote NAME_OR_UUID for a locally stored remote source table.
 remote inbox groups received additions by source; remote diff NAME compares
 one source table with local state; adopt creates a new local entry with
-provenance and is idempotent.
+provenance and is idempotent. remote send --global, recall --remote --global,
+remote diff --global and adopt --global do the same for global memory.
 setup accepts --actor ID and --config FILE; unsupported agents print an example.
 setup --hooks also installs a session-start hook that runs recall --brief
 (codex and claude-code only).
@@ -198,6 +199,7 @@ func run(ctx context.Context, args []string, out, logs io.Writer) error {
 		rest = rest[1:]
 	}
 	var recallSource string
+	var recallGlobal bool
 	switch command {
 	case "setup":
 		return runSetup(ctx, out, logs, rest, *dbPath)
@@ -210,11 +212,15 @@ func run(ctx context.Context, args []string, out, logs io.Writer) error {
 		f.SetOutput(logs)
 		source := f.String("remote", "", "source Elephant UUID or registered name")
 		brief := f.Bool("brief", false, "print a short text digest, or nothing when there is no memory")
+		global := f.Bool("global", false, "with --remote, read what the peer sent from its global memory")
 		if err := parseFlags(f, rest); err != nil {
 			return err
 		}
 		if f.NArg() != 0 {
 			return model.ErrInvalidInput
+		}
+		if *global && *source == "" {
+			return fmt.Errorf("%w: --global applies to --remote; recall already includes pinned global memory", model.ErrInvalidInput)
 		}
 		if *brief {
 			if *source != "" {
@@ -222,7 +228,7 @@ func run(ctx context.Context, args []string, out, logs io.Writer) error {
 			}
 			return runBrief(ctx, out, *cwd, *dbPath)
 		}
-		recallSource = *source
+		recallSource, recallGlobal = *source, *global
 	}
 	db, err := zova.Open(*dbPath)
 	if err != nil {
@@ -250,9 +256,12 @@ func run(ctx context.Context, args []string, out, logs io.Writer) error {
 		}
 		return transport.New(service, *cwd).Run(ctx, &sdk.StdioTransport{})
 	case "recall":
-		if recallSource == "" {
+		switch {
+		case recallSource == "":
 			result, err = service.Recall(ctx, *cwd, "")
-		} else {
+		case recallGlobal:
+			result, err = service.RecallRemoteGlobal(ctx, *cwd, recallSource)
+		default:
 			result, err = service.RecallRemote(ctx, *cwd, recallSource)
 		}
 	case "evidence":
@@ -298,13 +307,18 @@ func run(ctx context.Context, args []string, out, logs io.Writer) error {
 		adopt := flag.NewFlagSet("adopt", flag.ContinueOnError)
 		adopt.SetOutput(logs)
 		from := adopt.String("from", "", "remote name or source Elephant UUID")
+		global := adopt.Bool("global", false, "adopt an entry the peer sent from its global memory into local global memory")
 		if err = parseFlags(adopt, rest); err != nil {
 			return err
 		}
 		if adopt.NArg() != 1 || *from == "" {
 			return fmt.Errorf("%w: adopt requires ENTRY_ID --from NAME_OR_UUID", model.ErrInvalidInput)
 		}
-		result, err = service.Adopt(ctx, *cwd, adopt.Arg(0), *from)
+		if *global {
+			result, err = service.AdoptGlobal(ctx, *cwd, adopt.Arg(0), *from)
+		} else {
+			result, err = service.Adopt(ctx, *cwd, adopt.Arg(0), *from)
+		}
 	case "export":
 		f := flag.NewFlagSet("export", flag.ContinueOnError)
 		f.SetOutput(logs)

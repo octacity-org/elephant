@@ -132,8 +132,8 @@ func TestGlobalMemorySharedAcrossProjects(t *testing.T) {
 			t.Fatalf("search %+v: %v", f, err)
 		}
 	}
-	if _, err := s.BuildMessage(ctx, a, "entry.send", model.Fact, app.CreateInput{Title: "Global", Body: "send", Global: true}); !errors.Is(err, model.ErrInvalidInput) {
-		t.Fatalf("remote send of a global entry: %v", err)
+	if _, err := s.BuildMessage(ctx, a, "entry.send", model.Fact, app.CreateInput{Title: "Global", Body: "send", RelatedFiles: []string{"build.sh"}, Global: true}); !errors.Is(err, model.ErrInvalidInput) {
+		t.Fatalf("remote send of a global entry with files: %v", err)
 	}
 
 	// Outside Git only global memory is available, with no origin.

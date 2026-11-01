@@ -235,6 +235,51 @@ func TestReceiveProcessAndRemoteRecall(t *testing.T) {
 	if !errors.Is(err, model.ErrInvalidInput) || !strings.Contains(err.Error(), "two words") {
 		t.Fatalf("remote send --tag: %v", err)
 	}
+	err = run(ctx, []string{"--db", database, "--cwd", cwd, "remote", "send", "fedora", "fact", "--title", "T", "--body", "B", "--global", "--relation", "supports:" + id()}, &out, &logs)
+	if !errors.Is(err, model.ErrInvalidInput) || !strings.Contains(err.Error(), "global") {
+		t.Fatalf("remote send --global: %v", err)
+	}
+
+	// A global entry received through the real process is read and adopted
+	// with --global, outside Git too.
+	g := app.Message{ProtocolVersion: 1, MessageID: id(), SenderElephantID: sender, Project: app.ProjectRef{Identity: model.GlobalIdentity, Name: "global"}, Operation: "entry.send", Entry: &model.Entry{ID: id(), Kind: model.Fact, Title: "Shared rule", Body: "Everywhere", ActorID: "peer", Status: "active", CreatedAt: now, UpdatedAt: now}, Tags: []string{model.PinnedTag}}
+	data, _ = json.Marshal(g)
+	command := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestReceiveProcessAndRemoteRecall$")
+	command.Env = append(os.Environ(), "ELEPHANT_RECEIVE_TEST=1", "ELEPHANT_DB="+database)
+	command.Stdin = bytes.NewReader(data)
+	if response, err := command.Output(); err != nil || !strings.Contains(string(response), g.Entry.ID) {
+		t.Fatalf("receive global: %s %v", response, err)
+	}
+	outside := t.TempDir()
+	cli := func(into any, args ...string) {
+		t.Helper()
+		out.Reset()
+		if err := run(ctx, append([]string{"--db", database, "--cwd", outside}, args...), &out, &logs); err != nil {
+			t.Fatalf("%v: %v", args, err)
+		}
+		if err := json.Unmarshal(out.Bytes(), into); err != nil {
+			t.Fatalf("%v: %v %s", args, err, out.String())
+		}
+	}
+	var globalRecall app.RecallResult
+	if cli(&globalRecall, "recall", "--remote", sender, "--global"); len(globalRecall.Facts) != 1 || globalRecall.Facts[0].ID != g.Entry.ID {
+		t.Fatalf("recall --remote --global: %+v", globalRecall.Facts)
+	}
+	var diff app.DiffResult
+	if cli(&diff, "remote", "diff", "--global", sender); len(diff.RemoteOnly) != 1 {
+		t.Fatalf("remote diff --global: %+v", diff)
+	}
+	var adopted app.AdoptResult
+	if cli(&adopted, "adopt", "--from", sender, "--global", g.Entry.ID); adopted.SourceEntryID != g.Entry.ID {
+		t.Fatalf("adopt --global: %+v", adopted)
+	}
+	var pinned app.RecallResult
+	if cli(&pinned, "--cwd", cwd, "recall"); len(pinned.Global) != 1 || pinned.Global[0].Entry.ID != adopted.Entry.ID {
+		t.Fatalf("recall after adopt --global: %+v", pinned.Global)
+	}
+	if err := run(ctx, []string{"--db", database, "--cwd", cwd, "recall", "--global"}, &out, &logs); !errors.Is(err, model.ErrInvalidInput) {
+		t.Fatalf("recall --global without --remote: %v", err)
+	}
 }
 
 func TestSearchCLIFilters(t *testing.T) {
