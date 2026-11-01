@@ -57,11 +57,6 @@ func TestTagsAddSearchUpdateAndList(t *testing.T) {
 	if after := localEntryCount(t, s, cwd); after != before {
 		t.Fatalf("rejected adds wrote entries: %d -> %d", before, after)
 	}
-	// Remote messages carry no tags, so sending tags is an error, not a drop.
-	if _, err := s.BuildMessage(ctx, cwd, "entry.send", model.Fact, app.CreateInput{Title: "Sent", Body: "fact", Tags: []string{"build"}}); !errors.Is(err, model.ErrInvalidInput) {
-		t.Fatalf("remote send with tags: %v", err)
-	}
-
 	search := func(tags ...string) []app.SearchResult {
 		t.Helper()
 		res, err := s.Search(ctx, cwd, app.SearchFilters{Query: "builds", Tags: tags})

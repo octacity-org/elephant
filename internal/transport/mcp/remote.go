@@ -32,7 +32,7 @@ func registerRemotes(s *sdk.Server, service *app.Service, cwd func(string) strin
 		return service.Send(ctx, remote.ASH{}, in.Remote, m)
 	})
 	for _, kind := range []model.Kind{model.Fact, model.Decision, model.Task} {
-		register(s, "remote_send_"+string(kind), "Send a new "+string(kind)+" into this Elephant's source table on a registered peer, preserving actor provenance.", func(ctx context.Context, in remoteCreate) (app.Response, error) {
+		register(s, "remote_send_"+string(kind), "Send a new "+string(kind)+" into this Elephant's source table on a registered peer, preserving actor provenance and tags. adopt_entry copies the tags.", func(ctx context.Context, in remoteCreate) (app.Response, error) {
 			m, err := service.BuildMessage(ctx, cwd(in.CWD), "entry.send", kind, in.CreateInput)
 			if err != nil {
 				return app.Response{}, err

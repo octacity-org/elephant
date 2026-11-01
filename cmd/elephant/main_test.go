@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -193,7 +194,7 @@ func TestReceiveProcessAndRemoteRecall(t *testing.T) {
 	id := func() string { return uuid.NewV7().String() }
 	now := time.Now().UTC()
 	sender := id()
-	m := app.Message{ProtocolVersion: 1, MessageID: id(), SenderElephantID: sender, Project: app.ProjectRef{Identity: "github.com/test/cli", Name: "cli"}, Operation: "entry.send", Entry: &model.Entry{ID: id(), Kind: model.Decision, Title: "Remote choice", Body: "Rationale", ActorID: "claude-session", Status: "active", CreatedAt: now, UpdatedAt: now}}
+	m := app.Message{ProtocolVersion: 1, MessageID: id(), SenderElephantID: sender, Project: app.ProjectRef{Identity: "github.com/test/cli", Name: "cli"}, Operation: "entry.send", Entry: &model.Entry{ID: id(), Kind: model.Decision, Title: "Remote choice", Body: "Rationale", ActorID: "claude-session", Status: "active", CreatedAt: now, UpdatedAt: now}, Tags: []string{"build"}}
 	data, _ := json.Marshal(m)
 	for i := 0; i < 2; i++ {
 		command := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestReceiveProcessAndRemoteRecall$")
@@ -218,6 +219,9 @@ func TestReceiveProcessAndRemoteRecall(t *testing.T) {
 	if err := json.Unmarshal(out.Bytes(), &received); err != nil || len(received.Decisions) != 1 || received.Decisions[0].ActorID != "claude-session" {
 		t.Fatal(out.String(), err)
 	}
+	if !slices.ContainsFunc(received.Relations, func(r model.Relation) bool { return r.Type == model.TagEdge && r.To == model.TagNode("build") }) {
+		t.Fatalf("received tags: %+v", received.Relations)
+	}
 	out.Reset()
 	if err := run(ctx, []string{"--db", database, "--cwd", cwd, "recall"}, &out, &logs); err != nil {
 		t.Fatal(err)
@@ -225,6 +229,11 @@ func TestReceiveProcessAndRemoteRecall(t *testing.T) {
 	var local app.RecallResult
 	if err := json.Unmarshal(out.Bytes(), &local); err != nil || len(local.Decisions) != 0 {
 		t.Fatal(out.String(), err)
+	}
+	// remote send checks its tags before contacting the remote.
+	err := run(ctx, []string{"--db", database, "--cwd", cwd, "remote", "send", "fedora", "fact", "--title", "T", "--body", "B", "--tag", "two words"}, &out, &logs)
+	if !errors.Is(err, model.ErrInvalidInput) || !strings.Contains(err.Error(), "two words") {
+		t.Fatalf("remote send --tag: %v", err)
 	}
 }
 
