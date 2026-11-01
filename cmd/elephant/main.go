@@ -99,7 +99,9 @@ creates the database or a project, and prints nothing when there is no memory.
 add --global writes global memory shared by every project, also outside Git;
 it takes no files or relations and records the source project. recall and
 recall --brief show unfinished global entries tagged pinned; search --global
-finds any global entry, and inspect or update reach one by ID.
+finds any global entry, and inspect or update reach one by ID. A host:NAME tag
+limits a pinned entry to the machine named NAME: ELEPHANT_HOST, or the
+operating system's host name, as recall reports in host.
 Export output is deterministic for unchanged state; import validates fully
 before committing and never overwrites local truth.
 Review is read-only and deterministic; thresholds default to 30/90/30 days.
